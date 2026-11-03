@@ -14,15 +14,21 @@ DSH Web 插件：一个可以拖动、折叠的任务浮窗，以及主区工作
 
 本仓库是运行产物与验证源码组成的发布快照，入口已经可运行，无需构建。当前包版本为 `0.7.0`。
 
-优先在 DSH 的“插件 → 发现”中添加本仓库提供的市场索引地址并安装。市场索引发布后会固定到已验证的完整 Git commit，不依赖会变化的分支。
+在 DSH 的“插件 → 实验性插件 → 更多”中启用“自定义插件市场”，进入“发现 → 管理索引源”，添加：
+
+```text
+https://raw.githubusercontent.com/hualidan42-beep/dsh-plugin-task-radar/main/market-index.json
+```
+
+然后找到“工作小管家”点击安装。本索引固定到已验证的完整 Git commit，不依赖会变化的分支；这是作者自定义索引，不是 DSH 官方市场。
 
 也可在 DSH 插件管理器中使用固定提交的 Git 安装源：
 
 ```text
-git+https://github.com/hualidan42-beep/dsh-plugin-task-radar.git#<完整40位commit>
+git+https://github.com/hualidan42-beep/dsh-plugin-task-radar.git#45971482006ef29e594a835939a7edd8fa85abb8
 ```
 
-将占位 commit 替换为正式市场索引中声明的提交值，不能原样粘贴。安装 bundle 后默认选中启用，是否刷新或重启以宿主提示为准。不需要手工建立 junction 或覆盖 profile 文件。
+该安装源已固定到首次发布提交。安装 bundle 后默认选中启用，是否刷新或重启以宿主提示为准。不需要手工建立 junction 或覆盖 profile 文件。
 
 ## 数据与权限
 
