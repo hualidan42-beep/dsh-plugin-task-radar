@@ -1,0 +1,5 @@
+# The plugin-bundle patch layer: contributes 工作小管家 to the DSH web profile's
+# Cordis tree. 宿主半不做任何事（见 index.js），本层只是让客户端半被加载。
+- insert:
+  - id: task-radar
+    name: 'dsh-plugin-task-radar'
