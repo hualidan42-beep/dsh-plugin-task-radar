@@ -49,15 +49,19 @@ git push origin main
 
 ## 5. 发布到 npm（需要你本人在场）
 
+**一定要从发布快照目录发布**，不要从开发目录发：开发目录的 `files` 会带上 `docs/` 和
+开发脚本，包会大一半，内容也和 GitHub 上的快照不一致。
+
 这一步会要求 npm 账号的 2FA 验证码，只能由你本人在自己的 PowerShell 里输入：
 
 ```powershell
-cd D:\work\skill\plugins\dsh-plugin-task-radar
+cd D:\work\skill\releases\task-radar-github
 npm publish --access public --registry=https://registry.npmjs.org/
 ```
 
-看到 `+ dsh-plugin-task-radar@<版本号>` 就成功了。如果提示 `E403`，多半是 2FA
-没通过或验证码过期；提示 `E409` 表示这个版本号已经存在，回到第 1 步换一个版本号。
+看到 `+ dsh-plugin-task-radar@<版本号>` 就成功了。如果提示 `EOTP`，说明当前终端
+拿不到验证码，在自己开的 PowerShell 窗口里重跑即可；提示 `E403` 多半是 2FA 没通过；
+提示 `E409` 表示这个版本号已经存在，回到第 1 步换一个版本号。
 
 ## 6. 更新市场索引
 
