@@ -1,7 +1,7 @@
 {
   "format": 1,
   "title": { "en": "Task Radar Plugins", "zh-cn": "工作小管家插件市场" },
-  "description": { "en": "An author-maintained custom index using pinned Git commits. Not an official DSH market.", "zh-cn": "工作小管家作者维护的自定义索引，使用固定 Git 提交安装。非 DSH 官方市场。" },
+  "description": { "en": "An author-maintained custom index for the Task Radar plugin.", "zh-cn": "工作小管家作者维护的插件市场索引。" },
   "plugins": [
     {
       "name": "dsh-plugin-task-radar",
@@ -14,11 +14,10 @@
       "versions": [
         {
           "version": "0.7.0",
-          "publishTimestamp": 1793699878,
+          "publishTimestamp": 1793769919,
           "source": {
-            "type": "git",
-            "url": "https://github.com/hualidan42-beep/dsh-plugin-task-radar.git",
-            "commit": "45971482006ef29e594a835939a7edd8fa85abb8"
+            "type": "npm",
+            "registry": "https://registry.npmjs.org/"
           },
           "engines": {}
         }
