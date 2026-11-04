@@ -107,8 +107,9 @@ dsh plugin --profile <profile> add "dsh-plugin-task-radar@<版本号>"
 - **想撤回某个版本**：npm 发布 72 小时内可以用 `npm unpublish <包名>@<版本号>`,
   超过就只能发布新版本覆盖，不能删除。索引里删掉那条版本也很重要。
 
-## 延伸：还没做的部分
+## 延伸：社区目录
 
-- 社区目录 `awesome-dsh-plugin` 的收录 PR 尚未提交；提交后每次描述变化需要另开 PR
-  更新对应条目。
-- 仓库 `dsh-plugin` topic 与 GitHub Release 的添加状态需要在网页上核实。
+- 收录 PR 已提交：<https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/11965>
+  （只新增 `data/plugins/hualidan42-beep__dsh-plugin-task-radar.yml`）。合并前不会出现在目录里；
+  合并后如果插件描述或安装方式变化，需要另开 PR 更新同一个条目。
+- 条目源文件保留在 `contrib/hualidan42-beep__dsh-plugin-task-radar.yml`，改动时同步这份。
