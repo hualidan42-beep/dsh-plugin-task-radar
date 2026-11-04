@@ -2,17 +2,21 @@
 
 DSH Web 插件：一个可以拖动、折叠的任务浮窗，以及主区工作面板。
 
+![工作小管家](https://raw.githubusercontent.com/hualidan42-beep/dsh-plugin-task-radar/main/docs/cover.png)
+
 ## 功能
 
 - 按工作区查看会话：等你处理、正在运行、刚完成、空闲。
 - 查看待办清单、子代理、模型标签和 Token 用量，点击直达会话。
 - 本地记录今天、本周、本月的 Token 增量，首次观察只建基线，不补算历史。
-- 可选系统通知、浮窗外观和主题插画。
+- 可选系统通知、浮窗外观和主题插画；首次安装默认「桂花月兔」。
 - 可选联动 `dsh-plugin-skin`；未安装时仍可独立使用任务监控与浮窗外观。
+
+![主区面板](https://raw.githubusercontent.com/hualidan42-beep/dsh-plugin-task-radar/main/docs/panel.png)
 
 ## 安装
 
-本仓库是运行产物与验证源码组成的发布快照，入口已经可运行，无需构建。当前包版本为 `0.7.0`。
+本仓库是运行产物与验证源码组成的发布快照，入口已经可运行，无需构建。当前包版本以 `package.json` 为准。
 
 在 DSH 的“插件 → 实验性插件 → 更多”中启用“自定义插件市场”，进入“发现 → 管理索引源”，添加：
 

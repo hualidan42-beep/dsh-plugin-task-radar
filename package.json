@@ -10,6 +10,7 @@
     "client.js",
     "cordis.patch.yml",
     "README.md",
+    "LICENSE",
     "package.json"
   ],
   "exports": {
@@ -17,6 +18,7 @@
     "./client": "./client.js",
     "./package.json": "./package.json"
   },
+  "author": "孙爱珍 <aizhen.sun@wocheng.tv>",
   "keywords": [
     "dsh",
     "dsh-plugin",
@@ -28,20 +30,13 @@
   "engines": {
     "node": ">=18"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hualidan42-beep/dsh-plugin-task-radar.git"
+  },
+  "homepage": "https://github.com/hualidan42-beep/dsh-plugin-task-radar#readme",
   "scripts": {
-    "build:icon": "node scripts/build-icon.mjs",
-    "build:art": "node scripts/build-theme-art.mjs",
-    "icon:sheet": "node scripts/icon-sheet.mjs",
-    "verify": "node verify/radar-unit.mjs && node verify/apply-smoke.mjs",
-    "showcase": "node verify/showcase.mjs",
-    "verify:contrast": "node verify/contrast.mjs",
-    "gen:deco": "node scripts/gen-deco.mjs",
-    "build:deco": "node scripts/build-deco.mjs",
-    "shot": "node scripts/shot-showcase.mjs",
-    "icons": "node scripts/gen-icons.mjs",
-    "gen:hero": "node scripts/gen-hero.mjs",
-    "opt:hero": "node scripts/opt-hero.mjs",
-    "art:hero": "node scripts/gen-hero.mjs && node scripts/opt-hero.mjs && node scripts/build-deco.mjs"
+    "verify": "node verify/radar-unit.mjs && node verify/apply-smoke.mjs"
   },
   "dsh": {
     "bundle": {
