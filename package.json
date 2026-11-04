@@ -18,7 +18,7 @@
     "./client": "./client.js",
     "./package.json": "./package.json"
   },
-  "author": "孙爱珍 <aizhen.sun@wocheng.tv>",
+  "author": "孙爱珍",
   "keywords": [
     "dsh",
     "dsh-plugin",
