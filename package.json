@@ -1,7 +1,7 @@
 {
   "name": "dsh-plugin-task-radar",
-  "version": "0.7.0",
-  "description": "工作小管家：整帧浮动的树形小窗，按工作区归堆，会话下探出子代理，实时看谁在跑 / 谁等你 / 谁刚完成，每个任务带 Token 消耗，点一下直达；主区面板有总览带、Token 流水（今天/本周/本月）、可直接给整个界面换肤，六套自带插画的主题。",
+  "version": "0.7.1",
+  "description": "工作小管家：整帧浮动的树形小窗，按工作区归堆，会话下探出子代理，实时看谁在跑 / 谁等你 / 谁刚完成，每个任务带 Token 消耗，点一下直达；主区面板有总览带、Token 流水（今天/本周/本月）、可直接给整个界面换肤，六套自带插画的主题（默认桂花月兔）。",
   "license": "MIT",
   "type": "module",
   "main": "./index.js",
@@ -28,13 +28,20 @@
   "engines": {
     "node": ">=18"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/hualidan42-beep/dsh-plugin-task-radar.git"
-  },
-  "homepage": "https://github.com/hualidan42-beep/dsh-plugin-task-radar#readme",
   "scripts": {
-    "verify": "node verify/radar-unit.mjs && node verify/apply-smoke.mjs"
+    "build:icon": "node scripts/build-icon.mjs",
+    "build:art": "node scripts/build-theme-art.mjs",
+    "icon:sheet": "node scripts/icon-sheet.mjs",
+    "verify": "node verify/radar-unit.mjs && node verify/apply-smoke.mjs",
+    "showcase": "node verify/showcase.mjs",
+    "verify:contrast": "node verify/contrast.mjs",
+    "gen:deco": "node scripts/gen-deco.mjs",
+    "build:deco": "node scripts/build-deco.mjs",
+    "shot": "node scripts/shot-showcase.mjs",
+    "icons": "node scripts/gen-icons.mjs",
+    "gen:hero": "node scripts/gen-hero.mjs",
+    "opt:hero": "node scripts/opt-hero.mjs",
+    "art:hero": "node scripts/gen-hero.mjs && node scripts/opt-hero.mjs && node scripts/build-deco.mjs"
   },
   "dsh": {
     "bundle": {

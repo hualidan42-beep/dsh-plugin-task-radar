@@ -441,6 +441,13 @@ check(partial.view.settings.notify === true && same(partial.memory.running, {}),
 const throwing = radar.readStore("x", { getItem() { throw new Error("boom"); } });
 check(throwing.view.pos === null, "readStore: 存储抛错也不炸");
 
+// 默认外观是发给别人的第一眼，必须是完整的插画主题（不是「跟随宿主」那种像没装的灰白）。
+check(fresh.view.theme.preset === "osmanthus", "readStore: 头一次装上默认就是桂花月兔", fresh.view.theme);
+store.set("keep", JSON.stringify({ view: { theme: { preset: "raven", opacity: 80, image: "" } } }));
+check(radar.readStore("keep").view.theme.preset === "raven", "readStore: 用户选过的主题不会被默认值盖掉");
+store.set("dirty", JSON.stringify({ view: { theme: { preset: "no-such-theme" } } }));
+check(radar.readStore("dirty").view.theme.preset === "osmanthus", "readStore: 主题名不认识就退回默认（不是留着坏值渲染一屏没样式）");
+
 // ── 换肤桥：normalizeSkinSnapshot ────────────────────────────────────────────
 /**
  * 这一段钉的是"对方给什么都不能把面板画崩"。

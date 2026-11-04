@@ -114,7 +114,14 @@ const PANEL_LABEL = "工作小管家";
       falcon: Object.freeze({ label: "赛博隼", tone: "dark", tint: "#0e2427", deco: "falcon" }),
       raven: Object.freeze({ label: "墨刃黑鸦", tone: "light", tint: "#efe9dd", deco: "raven" }),
     });
-    const DEFAULT_THEME = Object.freeze({ preset: "auto", opacity: 100, image: "" });
+    /**
+     * 第一次装上的默认外观：桂花月兔。
+     *
+     * 发布到插件市场后，这个值就是"朋友装上看到的第一眼"，所以定成有完整插画的那套 ——
+     * 「跟随宿主」看着像没装插件。用户自己选过任何一个主题之后，`readStore` 读到的就是他的选择，
+     * 这里只在**存储里没有 theme** 时生效，不会覆盖老用户。
+     */
+    const DEFAULT_THEME = Object.freeze({ preset: "osmanthus", opacity: 100, image: "" });
 
     /**
      * 每套主题挂哪几张装饰、挂在哪个位置。
