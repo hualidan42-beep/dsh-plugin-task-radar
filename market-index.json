@@ -1,17 +1,47 @@
 {
   "format": 1,
-  "title": { "en": "Task Radar Plugins", "zh-cn": "工作小管家插件市场" },
-  "description": { "en": "An author-maintained custom index for the Task Radar plugin.", "zh-cn": "工作小管家作者维护的插件市场索引。" },
+  "title": {
+    "en": "Task Radar Plugins",
+    "zh-cn": "工作小管家插件市场"
+  },
+  "description": {
+    "en": "An author-maintained custom index for the Task Radar plugin.",
+    "zh-cn": "工作小管家作者维护的插件市场索引。"
+  },
   "plugins": [
     {
       "name": "dsh-plugin-task-radar",
-      "title": { "en": "Task Radar", "zh-cn": "工作小管家" },
-      "description": { "en": "Monitor workspace sessions, subagents, todo progress and token usage with a floating panel and local ledger.", "zh-cn": "按工作区查看会话与子代理状态、待办进度、Token 用量和本地流水；支持浮窗、通知及外观设置。" },
+      "title": {
+        "en": "Task Radar",
+        "zh-cn": "工作小管家"
+      },
+      "description": {
+        "en": "Monitor workspace sessions, subagents, todo progress and token usage with a floating panel and local ledger.",
+        "zh-cn": "按工作区查看会话与子代理状态、待办进度、Token 用量和本地流水；支持浮窗、通知及外观设置。"
+      },
       "author": "hualidan42-beep",
       "homepage": "https://github.com/hualidan42-beep/dsh-plugin-task-radar",
-      "repository": { "url": "https://github.com/hualidan42-beep/dsh-plugin-task-radar" },
-      "metadata": { "keywords": ["dsh", "task", "monitor", "overlay"] },
+      "repository": {
+        "url": "https://github.com/hualidan42-beep/dsh-plugin-task-radar"
+      },
+      "metadata": {
+        "keywords": [
+          "dsh",
+          "task",
+          "monitor",
+          "overlay"
+        ]
+      },
       "versions": [
+        {
+          "version": "0.7.1",
+          "publishTimestamp": 1793777273,
+          "source": {
+            "type": "npm",
+            "registry": "https://registry.npmjs.org/"
+          },
+          "engines": {}
+        },
         {
           "version": "0.7.0",
           "publishTimestamp": 1793769919,
