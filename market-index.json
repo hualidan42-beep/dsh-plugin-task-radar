@@ -73,6 +73,10 @@
         "zh-cn": "给整个界面换肤，可选插画与纹理壁纸，还有一只可放到 Windows 桌面常驻的小桌宠。"
       },
       "author": "hualidan42-beep",
+      "homepage": "https://github.com/hualidan42-beep/dsh-plugin-skin",
+      "repository": {
+        "url": "https://github.com/hualidan42-beep/dsh-plugin-skin"
+      },
       "metadata": {
         "keywords": [
           "dsh",
