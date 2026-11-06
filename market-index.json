@@ -1,12 +1,12 @@
 {
   "format": 1,
   "title": {
-    "en": "Task Radar Plugins",
-    "zh-cn": "工作小管家插件市场"
+    "en": "Personal DSH Plugins",
+    "zh-cn": "个人 DSH 插件市场"
   },
   "description": {
-    "en": "An author-maintained custom index for the Task Radar plugin.",
-    "zh-cn": "工作小管家作者维护的插件市场索引。"
+    "en": "An author-maintained custom index for DSH plugins.",
+    "zh-cn": "作者维护的 DSH 插件市场索引。"
   },
   "plugins": [
     {
@@ -54,6 +54,37 @@
         {
           "version": "0.7.0",
           "publishTimestamp": 1793769919,
+          "source": {
+            "type": "npm",
+            "registry": "https://registry.npmjs.org/"
+          },
+          "engines": {}
+        }
+      ]
+    },
+    {
+      "name": "dsh-plugin-skin",
+      "title": {
+        "en": "Theme and Appearance",
+        "zh-cn": "主题与外观"
+      },
+      "description": {
+        "en": "Reskin the whole DSH interface, pick illustration wallpapers, and keep a small desktop pet on Windows.",
+        "zh-cn": "给整个界面换肤，可选插画与纹理壁纸，还有一只可放到 Windows 桌面常驻的小桌宠。"
+      },
+      "author": "hualidan42-beep",
+      "metadata": {
+        "keywords": [
+          "dsh",
+          "theme",
+          "wallpaper",
+          "desktop-pet"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.7.0",
+          "publishTimestamp": 1793958682,
           "source": {
             "type": "npm",
             "registry": "https://registry.npmjs.org/"
