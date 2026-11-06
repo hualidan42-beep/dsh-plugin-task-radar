@@ -78,6 +78,16 @@ const PANEL_LABEL = "工作小管家";
     const SNAP = 24;
     /** 展开态宽度（px）；高度由内容决定，上限见 CSS 的 max-height。 */
     const CARD_W = 352;
+    /**
+     * 用户能拖出来的框体大小范围（px）。
+     *
+     * 下限用 300 而不是更小：再窄下去，行尾那列「工作区 + 时长」会开始互相挤，
+     * 标题被截成两三个字反而更难认。上限 560/760 是"再大就不像小窗了"。
+     */
+    const SIZE_MIN_W = 240;
+    const SIZE_MAX_W = 560;
+    const SIZE_MIN_H = 160;
+    const SIZE_MAX_H = 760;
 
     /** "完成未读"记录的最长寿命：超过就当作陈年旧账，不再提示。 */
     const MEMORY_TTL = 12 * 3600 * 1000;
@@ -121,7 +131,18 @@ const PANEL_LABEL = "工作小管家";
      * 「跟随宿主」看着像没装插件。用户自己选过任何一个主题之后，`readStore` 读到的就是他的选择，
      * 这里只在**存储里没有 theme** 时生效，不会覆盖老用户。
      */
-    const DEFAULT_THEME = Object.freeze({ preset: "osmanthus", opacity: 100, image: "" });
+    const DEFAULT_THEME = Object.freeze({
+      preset: "osmanthus",
+      opacity: 100,
+      image: "",
+      // 边框：`width: null` = 跟着主题走（每套主题自己的细环），用户拖过滑杆才变成具体像素。
+      // `color: ""` = 跟着主题走；非空就是用户自己挑的颜色。
+      border: Object.freeze({ width: null, color: "" }),
+    });
+
+    /** 边框粗细的可选范围（px）。0 是"不要边框"，3 已经比设计稿粗三倍，再多就抢戏了。 */
+    const BORDER_WIDTH_MIN = 0;
+    const BORDER_WIDTH_MAX = 3;
 
     /**
      * 每套主题挂哪几张装饰、挂在哪个位置。
@@ -184,7 +205,25 @@ const PANEL_LABEL = "工作小管家";
     const EMPTY_LIST = Object.freeze({ ids: [], byId: {}, phase: "pending", projectionsBySession: {} });
     const EMPTY_STATUSES = new Map();
     const EMPTY_WORKSPACES = Object.freeze({ items: [], archivedSessionIds: [] });
-    const EMPTY_MEMORY = Object.freeze({ running: {}, finished: {}, opened: {} });
+    /**
+     * 本地记忆。
+     *
+     * `snoozed` / `settled` / `quietUntil` 是"让它安静"那一套：
+     * - `snoozed[id]`：静音到这个时刻（这段时间里不显示、不提醒）；
+     * - `settled[id]`：我认定这事做完了（不是会话结束，是我认了）—— 从列表收起，能恢复；
+     * - `quietUntil`：今天别再弹系统通知（只压通知，不动列表）。
+     */
+    const EMPTY_MEMORY = Object.freeze({
+      running: {},
+      finished: {},
+      opened: {},
+      snoozed: Object.freeze({}),
+      settled: Object.freeze({}),
+      quietUntil: 0,
+    });
+
+    /** 静音一次多久（毫秒）。 */
+    const SNOOZE_MS = 60 * 60 * 1000;
 
     /** 一次最多列几行（再多就滚动/聚合，免得小窗变成一堵墙）。 */
     const MAX_DONE_ROWS = 8;
@@ -349,6 +388,14 @@ const PANEL_LABEL = "工作小管家";
 .dtr-card{--dtr-alpha:1;--dtr-image:none;position:relative;pointer-events:auto;display:flex;flex-direction:column;width:${CARD_W}px;max-height:min(62vh,560px);background-color:rgb(from var(--dsw-alias-bg-layer-1,#fff) r g b / 1);background-image:linear-gradient(color-mix(in srgb,rgb(from var(--dsw-alias-bg-layer-1,#fff) r g b / 1) calc(var(--dtr-alpha) * 100%),transparent),color-mix(in srgb,rgb(from var(--dsw-alias-bg-layer-1,#fff) r g b / 1) calc(var(--dtr-alpha) * 100%),transparent)),var(--dtr-grad,none),var(--dtr-image);background-size:cover;background-position:center;border:1px solid var(--dsw-alias-border-l2,rgba(15,23,42,.1));border-radius:14px;box-shadow:0 12px 32px rgba(15,23,42,.14),0 2px 6px rgba(15,23,42,.06);overflow:hidden;color:inherit;animation:dtr-in .18s cubic-bezier(.2,.8,.3,1)}
 @keyframes dtr-in{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
 .dtr-card[data-dragging=true]{box-shadow:0 20px 48px rgba(15,23,42,.22);animation:none}
+/* 改大小的把手：右下角两条斜线。常驻但很淡（.4），hover 才实 ——
+   完全藏起来等于没有入口；太实又像贴了张贴纸。 */
+.dtr-grip{position:absolute;right:0;bottom:0;width:22px;height:22px;z-index:3;cursor:nwse-resize;touch-action:none;opacity:.55;transition:opacity .12s ease}
+.dtr-card:hover .dtr-grip,.dtr-grip:focus-visible{opacity:1}
+.dtr-grip::before,.dtr-grip::after{content:"";position:absolute;right:5px;bottom:5px;height:2px;border-radius:1px;background:var(--dsw-alias-label-secondary,#4b5563);transform:rotate(-45deg);transform-origin:right center}
+.dtr-grip::before{width:12px}
+.dtr-grip::after{bottom:10px;width:6px}
+.dtr-card[data-dragging=true] .dtr-grip{opacity:0}
 
  .dtr-card[data-theme="ocean"]{--dsw-alias-state-business-primary:#3b82f6;--dsw-alias-state-warn-primary:#f59e0b;--dsw-alias-state-success-primary:#22c55e;--dsw-alias-bg-layer-1:#f9fcff;--dsw-alias-bg-layer-3:rgba(59,130,246,.08)}
 .dtr-card[data-theme="plum"]{--dsw-alias-state-business-primary:#8b5cf6;--dsw-alias-state-warn-primary:#f97316;--dsw-alias-state-success-primary:#22c55e;--dsw-alias-bg-layer-1:#fffaff;--dsw-alias-bg-layer-3:rgba(139,92,246,.08)}
@@ -421,7 +468,7 @@ const PANEL_LABEL = "工作小管家";
 .dtr-btn:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#4d6bfe);outline-offset:1px}
 
 /* ── 滚动区 ── */
-.dtr-body{overflow:auto;overscroll-behavior:contain;padding:2px 0 6px;scrollbar-width:thin;scrollbar-color:var(--dsw-alias-border-l3,rgba(15,23,42,.18)) transparent}
+.dtr-body{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;padding:2px 0 6px;scrollbar-width:thin;scrollbar-color:var(--dsw-alias-border-l3,rgba(15,23,42,.18)) transparent}
 .dtr-body::-webkit-scrollbar{width:9px}
 .dtr-body::-webkit-scrollbar-track{background:transparent}
 .dtr-body::-webkit-scrollbar-thumb{background:var(--dsw-alias-border-l3,rgba(15,23,42,.18));border-radius:9px;border:3px solid transparent;background-clip:content-box}
@@ -438,7 +485,18 @@ const PANEL_LABEL = "工作小管家";
 .dtr-seccount{margin-left:auto;font-size:11px;color:var(--dsw-alias-label-tertiary,#8b93a1);font-variant-numeric:tabular-nums}
 
 /* ── 行 ── */
-.dtr-item{display:block}
+.dtr-item{display:block;position:relative}
+/* 行尾两颗钉子：平时完全不占视觉，hover/键盘聚焦才出来，垫一层同色渐变免得压住数字看不清。 */
+.dtr-rowact{position:absolute;right:4px;top:3px;display:flex;gap:2px;padding-left:10px;opacity:0;pointer-events:none;transition:opacity .12s ease;background:linear-gradient(90deg,transparent,var(--dsw-alias-bg-layer-1,#fff) 30%)}
+.dtr-item:hover .dtr-rowact,.dtr-item:focus-within .dtr-rowact{opacity:1;pointer-events:auto}
+/* 鼠标在行上时把行尾的时间和标签淡掉：两颗钉子压在同一块地方，两套东西叠着读不清。 */
+.dtr-item .dtr-tail{transition:opacity .12s ease}
+.dtr-item:hover .dtr-tail{opacity:0}
+.dtr-actbtn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-tertiary,#8b93a1);cursor:pointer;transition:background .12s ease,color .12s ease}
+.dtr-actbtn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(15,23,42,.06));color:var(--dsw-alias-label-primary,#1f2328)}
+.dtr-actbtn:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#4d6bfe);outline-offset:-1px}
+.dtr-item[data-settled=true] .dtr-row{opacity:.55}
+.dtr-item[data-settled=true] .dtr-name{text-decoration:line-through;text-decoration-color:var(--dsw-alias-border-l3,rgba(15,23,42,.25))}
 .dtr-row{display:block;width:100%;border:0;background:transparent;padding:7px 12px;cursor:pointer;font:inherit;color:inherit;text-align:left;transition:background .12s ease}
 .dtr-row:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(15,23,42,.04))}
 .dtr-row:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#4d6bfe);outline-offset:-2px}
@@ -497,8 +555,15 @@ const PANEL_LABEL = "工作小管家";
 .dtr-empty-sub{font-size:11px;line-height:1.55}
 .dtr-more{padding:2px 12px 4px;font-size:11px;color:var(--dsw-alias-label-tertiary,#8b93a1)}
 .dtr-notice{margin:6px 12px 2px;padding:6px 9px;border-radius:7px;font-size:11px;line-height:1.45;color:var(--dsw-alias-state-warn-primary,#b45309);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary,#f59e0b) 12%,transparent)}
-.dtr-foot{display:flex;align-items:center;gap:6px;flex:none;height:26px;padding:0 12px;border-top:1px solid var(--dsw-alias-border-l3,rgba(15,23,42,.07));font-size:10.5px;color:var(--dsw-alias-label-tertiary,#8b93a1);font-variant-numeric:tabular-nums;background:var(--dsw-alias-bg-layer-1,#fff)}
-.dtr-foot-sep{width:1px;height:9px;background:var(--dsw-alias-border-l3,rgba(15,23,42,.12))}
+/* 窄了之后这行会挤成一团糊字（用户截图就是这样：每项自己折行，"10 个会/话"）。
+   现在：**整项换行**，不折项内的字；窄到放不下时把竖线分隔符收掉，换成自然的行间距。
+   容器查询读的是卡片自己的宽度 —— 跟视口宽度无关，这条必须用 @container。 */
+.dtr-foot{display:flex;align-items:center;gap:6px;flex:none;flex-wrap:wrap;row-gap:2px;min-height:26px;padding:3px 12px;overflow:hidden;padding:0 12px;border-top:1px solid var(--dsw-alias-border-l3,rgba(15,23,42,.07));font-size:10.5px;color:var(--dsw-alias-label-tertiary,#8b93a1);font-variant-numeric:tabular-nums;background:var(--dsw-alias-bg-layer-1,#fff)}
+.dtr-foot-sep{flex:none;width:1px;height:9px;background:var(--dsw-alias-border-l3,rgba(15,23,42,.12))}
+.dtr-foot>span{flex:none;white-space:nowrap}
+.dtr-card{container-type:inline-size}
+/* 竖线分隔符只在"一行放得下"时才有意义；一旦允许换行，它就是噪音。 */
+@container (max-width:400px){.dtr-foot-sep{display:none}}
 .dtr-foot-live{margin-left:auto;display:inline-flex;align-items:center;gap:4px;letter-spacing:.3px;text-transform:uppercase;font-size:9.5px}
 .dtr-foot-live::before{content:"";width:5px;height:5px;border-radius:999px;background:var(--dsw-alias-state-business-primary,#4d6bfe)}
 .dtr-foot-live{color:var(--dsw-alias-label-tertiary,#8b93a1)}.dtr-foot-live::before{animation:dtr-pulse 1.8s ease-in-out infinite}
@@ -506,6 +571,9 @@ const PANEL_LABEL = "工作小管家";
 .dtr-foot-tokens{color:var(--dsw-alias-label-secondary,#4b5563)}
 /* 卡底那个"本周"：比合计弱一档，它不是同一口径的数，不该抢。 */
 .dtr-foot-week{color:var(--dsw-alias-label-tertiary,#8b93a1);font-variant-numeric:tabular-nums}
+/* 静音计数：点一下全恢复。用虚线下划线暗示"可点"，别做成第二个按钮抢眼。 */
+.dtr-foot-snooze{flex:none;padding:0 2px;border:0;background:transparent;font:inherit;font-size:10.5px;color:var(--dsw-alias-label-tertiary,#8b93a1);text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px;cursor:pointer;white-space:nowrap}
+.dtr-foot-snooze:hover{color:var(--dsw-alias-label-secondary,#4b5563)}
 
 /* ── 设置 ── */
 .dtr-set{display:flex;flex-direction:column;padding:4px 0 2px}
@@ -539,6 +607,19 @@ const PANEL_LABEL = "工作小管家";
 .dtr-upload{display:flex;align-items:center;gap:8px;padding:7px 12px;border-top:1px solid var(--dsw-alias-border-l3,rgba(15,23,42,.07));font-size:11.5px;color:var(--dsw-alias-label-secondary,#4b5563);cursor:pointer}
 .dtr-upload input{display:none}
 .dtr-clear{margin-left:auto;border:0;background:transparent;color:var(--dsw-alias-state-warn-primary,#b45309);font:inherit;font-size:11px;cursor:pointer}
+/* 边框颜色那行：一个色块 + 一句"跟随主题"。色块用原生 input[type=color]，
+   不自己画调色板 —— 系统那个能取屏幕任意一点，比我画的几十个方格子有用。 */
+.dtr-border-row{display:flex;align-items:center;gap:8px;padding:6px 12px 9px;border-top:1px solid var(--dsw-alias-border-l3,rgba(15,23,42,.07));font-size:11.5px;color:var(--dsw-alias-label-secondary,#4b5563)}
+.dtr-border-row input[type=color]{width:34px;height:22px;padding:0;border:1px solid var(--dsw-alias-border-l2,rgba(15,23,42,.14));border-radius:6px;background:transparent;cursor:pointer}
+.dtr-border-row input[type=color]::-webkit-color-swatch-wrapper{padding:2px}
+.dtr-border-row input[type=color]::-webkit-color-swatch{border:0;border-radius:4px}
+.dtr-border-row .dtr-tail{font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-tertiary,#8b93a1)}
+/* 设置里的「安静」小列表：静音中 / 已收工的条目与恢复入口。 */
+.dtr-quiet-list{margin:2px 12px 8px;padding:6px 0 2px;border-top:1px solid var(--dsw-alias-border-l3,rgba(15,23,42,.07))}
+.dtr-quiet-head{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--dsw-alias-label-tertiary,#8b93a1)}
+.dtr-quiet-row{display:flex;align-items:center;gap:6px;padding:3px 0;font-size:11.5px;color:var(--dsw-alias-label-secondary,#4b5563)}
+.dtr-quiet-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dtr-quiet-row .dtr-tail{flex:none;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-tertiary,#8b93a1)}
 .dtr-setrow{display:flex;align-items:center;gap:10px;width:100%;padding:8px 12px;border:0;background:transparent;font:inherit;font-size:12.5px;color:inherit;text-align:left;cursor:pointer;transition:background .12s ease}
 .dtr-setrow:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(15,23,42,.04))}
 .dtr-setrow:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#4d6bfe);outline-offset:-2px}
@@ -550,7 +631,7 @@ const PANEL_LABEL = "工作小管家";
 .dtr-switch[data-on=true]>i{transform:translateX(12px)}
 
 /* ── 胶囊 ── */
-.dtr-pill{pointer-events:auto;display:inline-flex;align-items:center;gap:10px;height:32px;padding:0 13px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2,rgba(15,23,42,.1));background:var(--dsw-alias-bg-layer-1,#fff);box-shadow:0 8px 22px rgba(15,23,42,.16);cursor:grab;font:inherit;font-size:11px;font-weight:600;color:var(--dsw-alias-label-secondary,#4b5563);font-variant-numeric:tabular-nums;touch-action:none;user-select:none;transition:transform .12s ease,box-shadow .12s ease}
+.dtr-pill{pointer-events:auto;display:inline-flex;align-items:center;gap:10px;height:32px;padding:0 13px;border-radius:999px;border-style:solid;border-width:var(--dtr-border-w,1px);border-color:var(--dtr-border-color,var(--dsw-alias-border-l2,rgba(15,23,42,.1)));background:var(--dsw-alias-bg-layer-1,#fff);box-shadow:0 8px 22px rgba(15,23,42,.16);cursor:grab;font:inherit;font-size:11px;font-weight:600;color:var(--dsw-alias-label-secondary,#4b5563);font-variant-numeric:tabular-nums;touch-action:none;user-select:none;transition:transform .12s ease,box-shadow .12s ease}
 .dtr-pill:hover{transform:translateY(-1px);box-shadow:0 12px 28px rgba(15,23,42,.2)}
 .dtr-pill:active{transform:none}
 .dtr-pill:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#4d6bfe);outline-offset:2px}
@@ -700,7 +781,7 @@ const PANEL_LABEL = "工作小管家";
 /* 胶囊里那枚小头像：方形裁切到脸上，不然 30px 里只剩一团颜色。 */
 /* 胶囊里那枚小头像：背景图放大三倍多，只留脸那一窗（<img> 的老写法见 CardDeco 里的注释）。 */
 .dtr-deco-face[data-slot="pill"]{width:30px;height:30px;border-radius:999px;background-size:240%;background-repeat:no-repeat;background-position:calc((var(--dtr-focus-x,47%) - 20.83%) / 0.5833) calc((var(--dtr-focus-y,17%) - 20.83% + 3%) / 0.5833);background-color:var(--dsw-alias-bg-layer-2,#eef2f6);border:1px solid rgba(255,255,255,.75);box-shadow:0 1px 4px rgba(15,23,42,.2);transform:translateY(-50%)}
-.dtr-card{border-radius:18px;border-color:var(--dtr-ring,rgba(15,23,42,.06));box-shadow:0 22px 48px -18px var(--dtr-glow,rgba(15,23,42,.3)),0 2px 10px rgba(15,23,42,.05)}
+.dtr-card{border-radius:18px;border-width:var(--dtr-border-w,1px);border-style:solid;border-color:var(--dtr-border-color,var(--dtr-ring,rgba(15,23,42,.06)));box-shadow:0 22px 48px -18px var(--dtr-glow,rgba(15,23,42,.3)),0 2px 10px rgba(15,23,42,.05)}
 .dtr-head{padding:11px 10px 8px 12px;align-items:flex-start;gap:9px}
 .dtr-headtext{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
 .dtr-title{line-height:1.15}
@@ -912,6 +993,36 @@ const PANEL_LABEL = "工作小管家";
       return "等待处理";
     }
 
+    /** 静音到点没有：`memory.snoozed[id]` 存的是"解禁时刻"。 */
+    function isSnoozed(memory, id, now) {
+      const until = Number(memory?.snoozed?.[id]);
+      return Number.isFinite(until) && until > now;
+    }
+
+    /** 被我手动收工的会话（会话还在，但我说了它不归我盯了）。 */
+    function isSettled(memory, id) {
+      const at = Number(memory?.settled?.[id]);
+      return Number.isFinite(at) && at > 0;
+    }
+
+    /** 现在是否处于"今天别再提醒"的窗口里。 */
+    function isQuiet(memory, now) {
+      const until = Number(memory?.quietUntil);
+      return Number.isFinite(until) && until > now;
+    }
+
+    /**
+     * 今天几点结束（下一自然日 0 点）。
+     *
+     * 用本地时区算，不用 UTC —— 用户说的"今天"是他钟表上的今天。
+     * @param {number} now 当前时刻。
+     * @returns {number} 明天 0 点的时间戳。
+     */
+    function endOfToday(now) {
+      const date = new Date(now);
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1, 0, 0, 0, 0).getTime();
+    }
+
     /**
      * 给一个会话定状态。优先级与宿主完全一致：等你处理 > 运行中 > 刚完成 > 空闲。
      *
@@ -931,6 +1042,30 @@ const PANEL_LABEL = "工作小管家";
       const opened = memory && memory.opened ? memory.opened[id] ?? 0 : 0;
       if (typeof finished === "number" && finished > opened && now - finished < MEMORY_TTL) return "done";
       return "idle";
+    }
+
+    /**
+     * 把一个时刻写成"什么时候恢复"。
+     *
+     * 今天的就说「到 15:20」，跨天（静音到今天结束那种）说「到明天」——
+     * 时间戳本身对用户没意义，他要的是"还得忍多久"。
+     * @param {number} ts 时间戳。
+     * @param {number} [now] 当前时刻（测试用）。
+     * @returns {string} 人类可读的时刻。
+     */
+    function formatUntil(ts, now = Date.now()) {
+      const at = new Date(Number(ts));
+      if (!Number.isFinite(at.getTime())) return "";
+      const clock = String(at.getHours()).padStart(2, "0") + ":" + String(at.getMinutes()).padStart(2, "0");
+      const today = new Date(now);
+      if (at.getFullYear() === today.getFullYear() && at.getMonth() === today.getMonth() && at.getDate() === today.getDate()) {
+        return "到 " + clock;
+      }
+      const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+      if (at.getFullYear() === tomorrow.getFullYear() && at.getMonth() === tomorrow.getMonth() && at.getDate() === tomorrow.getDate()) {
+        return "到明天 " + clock;
+      }
+      return "到 " + (at.getMonth() + 1) + "/" + at.getDate() + " " + clock;
     }
 
     /**
@@ -1410,6 +1545,9 @@ ow` 由调用方传入），
         subagents: {},
         phase: "ready",
         hidden: 0,
+        // 安静那一套：被静音的会话不进行、被我收工的进 settled（不占四个状态格）。
+        snoozed: [],
+        settled: [],
       };
       if (!list || !Array.isArray(list.ids)) return model;
       model.phase = list.phase === "pending" ? "pending" : "ready";
@@ -1444,6 +1582,15 @@ ow` 由调用方传入），
           unread: Boolean(status && status.completionUnread),
         };
         const kind = classify(state, memory, id, now);
+        // 静音中：这条直接不进列表 —— 但会记进 model.snoozed，好让界面明说"还有 2 条被静音"。
+        if (isSnoozed(memory, id, now)) {
+          model.snoozed.push({
+            id,
+            title: String(session.displayTitle ?? session.title ?? id),
+            until: Number(memory.snoozed[id]),
+          });
+          continue;
+        }
         const projections = projectionsOf(id);
         const usage = usageOf(projections, () => trajectoryUsageOf(ctx, id));
         const view = viewOf.get(id);
@@ -1530,7 +1677,16 @@ ow` 由调用方传入），
       }
 
       const bucket = { waiting: [], running: [], done: [], idle: [] };
-      for (const row of rows) bucket[row.kind].push(row);
+      for (const row of rows) {
+        // 我收工过的：从四个状态格里拿掉，进单独一栏（能恢复）。
+        // 「等你处理」例外 —— 有人要你批东西，比"我说过做完了"更要紧。
+        if (isSettled(memory, row.id) && row.kind !== "waiting") {
+          row.settled = true;
+          model.settled.push(row);
+          continue;
+        }
+        bucket[row.kind].push(row);
+      }
       // 等你处理：最近动过的在上（谁刚卡住，谁先说话）。
       bucket.waiting.sort((left, right) => right.updatedAt - left.updatedAt);
       // 正在跑：跑得最久的在上（最容易出问题的那个先被你看到）。
@@ -1550,6 +1706,8 @@ ow` 由调用方传入），
         done: bucket.done.length,
         idle: bucket.idle.length,
         total: rows.length,
+        snoozed: model.snoozed.length,
+        settled: model.settled.length,
       };
 
       // ── 按工作区归堆：工作小管家看的是工作，不是假造的 Agent 层级 ─────────
@@ -1557,7 +1715,7 @@ ow` 由调用方传入），
       const rankOf = (row) => (row.kind === "waiting" ? 0 : row.kind === "running" ? 1 : row.kind === "done" ? 2 : 3);
       const grouped = new Map();
       for (const row of rows) {
-        if (row.kind === "idle") continue;
+        if (row.kind === "idle" || row.settled === true) continue;
         const title = row.workspace !== "" ? row.workspace : row.cwd !== "" ? row.cwd : "未归类";
         if (!grouped.has(title)) grouped.set(title, []);
         grouped.get(title).push(row);
@@ -1633,7 +1791,23 @@ ow` 由调用方传入），
       for (const [id, at] of Object.entries(running)) {
         if (!seen.has(id) && now - at > MEMORY_TTL) delete running[id];
       }
-      return { running, finished, opened };
+
+      // 静音与收工：过期的静音随手清掉；收工的会话一旦又跑起来，说明人家又开工了，
+      // 自动恢复 —— 不能让"我说过做完了"永久盖住一个真的在动的会话。
+      const snoozed = {};
+      for (const [id, until] of Object.entries(prev.snoozed ?? {})) {
+        if (Number(until) > now) snoozed[id] = Number(until);
+      }
+      const settled = {};
+      for (const [id, at] of Object.entries(prev.settled ?? {})) {
+        if (!Number.isFinite(Number(at))) continue;
+        settled[id] = Number(at);
+      }
+      for (const row of model.rows ?? []) {
+        if (row.kind === "running" || row.kind === "waiting") delete settled[row.id];
+      }
+      const quietUntil = Number(prev.quietUntil) > now ? Number(prev.quietUntil) : 0;
+      return { running, finished, opened, snoozed, settled, quietUntil };
     }
 
     /**
@@ -1670,6 +1844,98 @@ ow` 由调用方传入），
     }
 
     /**
+     * 边框设置：归一化 + 变成两个 CSS 自定义属性。
+     *
+     * 两个字段都必须能表示"没设过"：
+     * - `width: null` = 跟着主题走（每套主题自己那一档细环），用户拖过滑杆才变成具体像素；
+     * - `color: ""` = 跟着主题走，非空才是他自己挑的颜色。
+     * 认不出的值一律当没设过 —— 硬塞个默认值，等于把「恢复成主题的边框」这条路堵死。
+     * @param {unknown} raw 存储里的原值。
+     * @returns {{ width: number|null, color: string }} 归一化后的边框设置。
+     */
+    function normalizeBorder(raw) {
+      const source = raw && typeof raw === "object" ? raw : {};
+      let width = null;
+      if (source.width !== null && source.width !== undefined && source.width !== "") {
+        const parsed = Number(source.width);
+        if (Number.isFinite(parsed)) width = Math.round(Math.max(BORDER_WIDTH_MIN, Math.min(BORDER_WIDTH_MAX, parsed)));
+      }
+      const color = typeof source.color === "string" && /^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(source.color.trim())
+        ? source.color.trim().toLowerCase()
+        : "";
+      return { width, color };
+    }
+
+    /**
+     * 把边框设置摊成内联的自定义属性。
+     *
+     * 没设过的项**不放**进样式表：CSS 里 `var(--dtr-border-w, 1px)` 的兜底才有机会落到
+     * 主题自己的 `--dtr-ring` 上。这里塞一个默认值，主题那圈细白边就再也画不出来了。
+     * @param {object} theme 主题状态。
+     * @returns {object} 可以直接并进 style 的对象。
+     */
+    function borderStyle(theme) {
+      const border = normalizeBorder(theme?.border);
+      const style = {};
+      if (border.width !== null) style["--dtr-border-w"] = border.width + "px";
+      if (border.color !== "") style["--dtr-border-color"] = border.color;
+      return style;
+    }
+
+    /**
+     * 框体大小归一化：`null` = 用默认那套（宽度按内容、高度由内容决定）。
+     *
+     * 存下来的是"用户拖过的具体像素"，所以必须夹范围、取整 —— 拖到一半关掉页面，
+     * 存进去的可能是 431.98437px 这种值，读回来就会让卡片边缘糊成一条。
+     * @param {unknown} raw 存储里的原值。
+     * @returns {{ w: number, h: number }|null} 归一化后的大小。
+     */
+    function normalizeSize(raw) {
+      if (!raw || typeof raw !== "object") return null;
+      const w = Number(raw.w);
+      const h = Number(raw.h);
+      if (!Number.isFinite(w) || !Number.isFinite(h)) return null;
+      // 视口也可能是上限：把框拖到比屏幕还高，等于自己把内容藏起来。
+      const vw = typeof window !== "undefined" && Number.isFinite(window.innerWidth) ? window.innerWidth - EDGE * 2 : SIZE_MAX_W;
+      const vh = typeof window !== "undefined" && Number.isFinite(window.innerHeight) ? window.innerHeight - EDGE * 2 : SIZE_MAX_H;
+      return {
+        w: Math.round(Math.max(SIZE_MIN_W, Math.min(SIZE_MAX_W, vw, w))),
+        h: Math.round(Math.max(SIZE_MIN_H, Math.min(SIZE_MAX_H, vh, h))),
+      };
+    }
+
+    /**
+     * 把框体大小摊成内联样式。
+     *
+     * 没拖过就**什么都别给**：默认宽度写死在 CSS 里（`width:352px`、`max-height:min(62vh,560px)`），
+     * 这里塞个值进去，滚轮/窗口高度一变，那套自适应就全废了。
+     * 拖过之后改成固定 `height` —— 用户要的是"这个框有多大"，不是"最多能有多大"；
+     * 内容多了由 `.dtr-body` 自己滚动。
+     * @param {object|null} size 框体大小。
+     * @returns {object} 可以直接并进 style 的对象。
+     */
+    function sizeStyle(size) {
+      const normalized = normalizeSize(size);
+      if (!normalized) return {};
+      return { width: normalized.w + "px", height: normalized.h + "px", maxHeight: "none" };
+    }
+
+    /**
+     * `{ id: 时间戳 }` 这种表的归一化：只留有限数字，其余丢掉。
+     * @param {unknown} raw 存储里的原值。
+     * @returns {object} 干净的表。
+     */
+    function normalizeTimes(raw) {
+      const out = {};
+      if (!raw || typeof raw !== "object") return out;
+      for (const [id, value] of Object.entries(raw)) {
+        const num = Number(value);
+        if (Number.isFinite(num) && num > 0) out[id] = num;
+      }
+      return out;
+    }
+
+    /**
      * 读本地存储。任何异常都退回默认值 —— 存储坏了不该让雷达消失。
      * @param {string} key 存储键。
      * @param {Storage} [storage] 存储对象（默认 localStorage）。
@@ -1677,7 +1943,7 @@ ow` 由调用方传入），
      */
     function readStore(key, storage) {
       const fallback = {
-        view: { pos: null, collapsed: false, idleOpen: false, closedRows: {}, planOpen: {}, closedGroups: {}, theme: { ...DEFAULT_THEME }, settings: { ...DEFAULT_SETTINGS } },
+        view: { pos: null, size: null, collapsed: false, idleOpen: false, closedRows: {}, planOpen: {}, closedGroups: {}, theme: { ...DEFAULT_THEME }, settings: { ...DEFAULT_SETTINGS } },
         memory: { ...EMPTY_MEMORY },
         usage: emptyLedger(),
       };
@@ -1701,12 +1967,14 @@ ow` 由调用方传入），
       const pos = view.pos && typeof view.pos.x === "number" && typeof view.pos.y === "number"
         ? { x: Math.round(view.pos.x), y: Math.round(view.pos.y) }
         : null;
+      const size = normalizeSize(view.size);
       const memory = parsed.memory && typeof parsed.memory === "object" ? parsed.memory : {};
       const rawTheme = view.theme && typeof view.theme === "object" ? view.theme : {};
       const theme = {
         preset: typeof rawTheme.preset === "string" && THEME_PRESETS[rawTheme.preset] ? rawTheme.preset : DEFAULT_THEME.preset,
         opacity: Number.isFinite(Number(rawTheme.opacity)) ? Math.max(55, Math.min(100, Number(rawTheme.opacity))) : DEFAULT_THEME.opacity,
         image: typeof rawTheme.image === "string" && rawTheme.image.length <= 2_000_000 ? rawTheme.image : DEFAULT_THEME.image,
+        border: normalizeBorder(rawTheme.border),
       };
       // 待办清单状态：进行中任务默认展开，因此 false 也要落盘（表示用户主动收起）。
       const planOpen = {};
@@ -1732,6 +2000,7 @@ ow` 由调用方传入），
       return {
         view: {
           pos,
+          size,
           collapsed: view.collapsed === true,
           idleOpen: view.idleOpen === true,
           closedRows,
@@ -1747,6 +2016,10 @@ ow` 由调用方传入），
           running: memory.running && typeof memory.running === "object" ? { ...memory.running } : {},
           finished: memory.finished && typeof memory.finished === "object" ? { ...memory.finished } : {},
           opened: memory.opened && typeof memory.opened === "object" ? { ...memory.opened } : {},
+          // 安静那一套：只认数字，脏值一律当没设过。
+          snoozed: normalizeTimes(memory.snoozed),
+          settled: normalizeTimes(memory.settled),
+          quietUntil: Number.isFinite(Number(memory.quietUntil)) ? Number(memory.quietUntil) : 0,
         },
         usage: normalizeLedger(parsed.usage),
       };
@@ -1817,6 +2090,9 @@ ow` 由调用方传入），
         ],
         // 空态用"一个圈 + 中心点"：同样在说"雷达在扫"，但不会在 26px 下被看成刷新箭头。
         target: ["M6.75 2.3a4.45 4.45 0 1 1-3.15 1.3", "M6.75 6.75h.01"],
+      // 静音：铃铛轮廓 + 一道斜杠。13px 下画完整的铃铛只剩个疙瘩，加斜杠才认得出"关掉"。
+      snooze: ["M4 9.2V6.3a2.8 2.8 0 0 1 5.6 0v2.9l.9 1.1H3.1z", "M5.7 11.6a1.1 1.1 0 0 0 2.1 0", "M2.6 2.7 10.9 11"],
+      check: ["M3.2 7.1 5.7 9.6 10.3 4.3"],
       };
       const list = paths[name] ?? paths.minus;
       return h(
@@ -1871,7 +2147,7 @@ ow` 由调用方传入），
      * @param {{ row: object, now: number, expanded: boolean, onOpen: (id: string) => void, onToggleExpand: (id: string) => void }} props 行属性。
      * @returns {React.ReactElement} 行。
      */
-    function RowView({ row, now, expanded, planOpen, guide, childPrefix, onOpen, onToggleExpand, onTogglePlan }) {
+    function RowView({ row, now, expanded, planOpen, guide, childPrefix, onOpen, onToggleExpand, onTogglePlan, onSnooze, onSettle, onRestore }) {
       const place = row.workspace || row.cwd;
       // 冷会话的 displayTitle 常常就是目录名：这种情况再挂一个同名的工作区标签只是噪声。
       const showPlace = place !== "" && place !== row.title;
@@ -1893,7 +2169,7 @@ ow` 由调用方传入），
                 "aria-expanded": planOpen === true,
                 title: (planOpen ? "收起" : "展开") + "全部 " + row.todo.total + " 步",
                 onClick: (event) => {
-                  event.stopPropagation();
+                  event.stopPropagation?.();
                   onTogglePlan(row.id);
                 },
               },
@@ -1997,14 +2273,41 @@ ow` 由调用方传入），
         )
         : null;
 
+      // 悬停才露的两颗钉子：静音一小时 / 我认这活做完了。平时完全透明，
+      // 但鼠标一进来就压住行尾那列数字 —— 常驻小窗最缺的就是"别烦我"这个动作。
+      const acts = h(
+        "div",
+        { className: "dtr-rowact" },
+        row.settled
+          ? h(
+            "button",
+            { type: "button", className: "dtr-actbtn", title: "恢复：重新盯这个任务", "aria-label": "恢复", onClick: (event) => { event.stopPropagation?.(); onRestore(row.id); } },
+            h(Icon, { name: "refresh", size: 11 }),
+          )
+          : h(
+            "button",
+            { type: "button", className: "dtr-actbtn", title: "静音 1 小时（这段时间里不显示、不提醒）", "aria-label": "静音 1 小时", onClick: (event) => { event.stopPropagation?.(); onSnooze(row.id); } },
+            h(Icon, { name: "snooze", size: 11 }),
+          ),
+        // 「等你处理」不画收工这颗：点了也不生效（有人等你批东西），按钮留着只会怪用户按。
+        row.settled || row.kind === "waiting"
+          ? null
+          : h(
+            "button",
+            { type: "button", className: "dtr-actbtn", title: "我认这活做完了：从列表收起，随时可恢复", "aria-label": "标记完成", onClick: (event) => { event.stopPropagation?.(); onSettle(row.id); } },
+            h(Icon, { name: "check", size: 11 }),
+          ),
+      );
+
       if (!expanded || !row.children || row.children.length === 0) {
-        return h("div", { className: "dtr-item", "data-kind": row.kind }, body, plan);
+        return h("div", { className: "dtr-item", "data-kind": row.kind, "data-settled": row.settled ? "true" : "false" }, body, plan, acts);
       }
       return h(
         "div",
-        { className: "dtr-item", "data-kind": row.kind },
+        { className: "dtr-item", "data-kind": row.kind, "data-settled": row.settled ? "true" : "false" },
         body,
         plan,
+        acts,
         h(
           "div",
           { className: "dtr-kids" },
@@ -2066,7 +2369,10 @@ ow` 由调用方传入），
      * @param {{ settings: object, theme: object, onChange: Function, onThemeChange: Function, onImage: Function, notifyState: string, onAskNotify: Function, onReset: Function }} props 属性。
      * @returns {React.ReactElement} 设置。
      */
-    function SettingsPanel({ settings, theme, onChange, onThemeChange, onImage, notifyState, onAskNotify, onReset }) {
+    function SettingsPanel({ settings, theme, onChange, onThemeChange, onImage, notifyState, onAskNotify, onReset, onResetSize, hasSize, quiet, quietUntil, snoozed, onQuiet, onUnsnooze, onUnsnoozeAll, settledCount, onRestoreAll }) {
+      // 边框：没设过就是"跟随主题"，滑杆/色板都按这个语义显示。
+      const border = theme.border ?? DEFAULT_THEME.border;
+      const borderWidth = border.width;
       const row = (key, label, value, onToggle) =>
         h(
           "button",
@@ -2101,6 +2407,77 @@ ow` 由调用方传入），
         h("div", { className: "dtr-setlabel" }, "外观"),
         h("div", { className: "dtr-theme-grid" }, themeOptions),
         h("label", { className: "dtr-range" }, h("span", null, "透明度"), h("output", null, Math.round(theme.opacity) + "%"), h("input", { type: "range", min: 55, max: 100, step: 1, value: theme.opacity, onChange: (event) => onThemeChange({ opacity: Number(event.target.value) }) })),
+        // ── 边框：粗细 + 颜色 ──────────────────────────────────────────────
+        // 两行都给「跟随主题」这档：主题那圈细环（樱粉是白、墨刃是焦边）是设计的一部分，
+        // 用户调只是在他那面壁纸/宿主配色上微调，不是逼他二选一。
+        h(
+          "label",
+          { className: "dtr-range" },
+          h("span", null, "边框粗细"),
+          h("output", null, borderWidth === null ? "跟随主题" : borderWidth + "px"),
+          h("input", {
+            type: "range",
+            min: BORDER_WIDTH_MIN,
+            max: BORDER_WIDTH_MAX,
+            step: 1,
+            value: borderWidth ?? 1,
+            "aria-label": "边框粗细",
+            onChange: (event) => onThemeChange({ border: { ...border, width: Number(event.target.value) } }),
+          }),
+        ),
+        h(
+          "div",
+          { className: "dtr-border-row" },
+          h("span", null, "边框颜色"),
+          h("input", {
+            type: "color",
+            value: border.color || "#ffffff",
+            "aria-label": "边框颜色",
+            title: border.color || "跟随主题",
+            onChange: (event) => onThemeChange({ border: { ...border, color: String(event.target.value) } }),
+          }),
+          h("span", { className: "dtr-tail" }, border.color || "跟随主题"),
+          border.color !== "" || border.width !== null
+            ? h(
+              "button",
+              { type: "button", className: "dtr-clear", onClick: () => onThemeChange({ border: { width: null, color: "" } }) },
+              "恢复主题边框",
+            )
+            : null,
+        ),
+        h("div", { className: "dtr-hint" }, "小窗右下角那颗把手可以拖着改大小，双击恢复默认。"),
+        // ── 让它安静 ───────────────────────────────────────────────────────
+        // 常驻小窗最怕变成噪音源：能静音、能自己认定"这事完了"、能今天先别弹。
+        h("div", { className: "dtr-setlabel" }, "安静"),
+        row("quiet", "今天别再弹提醒", quiet === true, () => onQuiet(!quiet)),
+        quiet
+          ? h("div", { className: "dtr-hint" }, "到明天 0 点自动恢复（" + formatUntil(quietUntil) + "）。列表照常显示，只是不弹系统通知。")
+          : null,
+        snoozed.length > 0
+          ? h(
+            "div",
+            { className: "dtr-quiet-list" },
+            h("div", { className: "dtr-quiet-head" }, h("span", null, "静音中 · " + snoozed.length), h("button", { type: "button", className: "dtr-clear", onClick: onUnsnoozeAll }, "全部恢复")),
+            snoozed.slice(0, 3).map((item) =>
+              h(
+                "div",
+                { key: item.id, className: "dtr-quiet-row" },
+                h("span", { className: "dtr-quiet-name", title: item.title }, item.title),
+                h("span", { className: "dtr-tail" }, formatUntil(item.until)),
+                h("button", { type: "button", className: "dtr-actbtn", "aria-label": "恢复 " + item.title, title: "恢复", onClick: () => onUnsnooze(item.id) }, h(Icon, { name: "refresh", size: 11 })),
+              ),
+            ),
+            snoozed.length > 3 ? h("div", { className: "dtr-hint" }, "还有 " + (snoozed.length - 3) + " 条") : null,
+          )
+          : null,
+        settledCount > 0
+          ? h(
+            "div",
+            { className: "dtr-quiet-list" },
+            h("div", { className: "dtr-quiet-head" }, h("span", null, "已收工 · " + settledCount), h("button", { type: "button", className: "dtr-clear", onClick: onRestoreAll }, "全部恢复")),
+            h("div", { className: "dtr-hint" }, "在列表最下面「已收工」那一栏里，点行上那枚 ↻ 可以单条恢复。"),
+          )
+          : null,
         h("label", { className: "dtr-upload" }, h("span", null, theme.image ? "替换底图" : "上传底图"), h("input", { type: "file", accept: "image/png,image/jpeg,image/webp,image/gif", onChange: onImage }), theme.image ? h("button", { type: "button", className: "dtr-clear", onClick: (event) => { event.preventDefault(); onThemeChange({ image: "" }); } }, "清除") : null),
         row("idle", "显示空闲会话", settings.showIdle, () => onChange({ showIdle: !settings.showIdle })),
         row("notify", "完成时弹系统通知", settings.notify, () => onChange({ notify: !settings.notify })),
@@ -2121,6 +2498,9 @@ ow` 由调用方传入），
               : null,
           )
           : h("div", { className: "dtr-hint" }, "系统通知已开启：会话停下来时会弹一条，点通知直接跳进那个会话。"),
+        hasSize
+          ? h("button", { type: "button", className: "dtr-setrow", onClick: onResetSize }, h("span", null, "把框体大小恢复默认"), h("span", { className: "dtr-tail" }, "↺"))
+          : null,
         h("button", { type: "button", className: "dtr-setrow", onClick: onReset }, h("span", null, "把小窗位置恢复默认"), h("span", { className: "dtr-tail" }, "↺")),
       );
     }
@@ -2491,7 +2871,9 @@ ow` 由调用方传入），
           { key: "idle", value: model.counts.idle, label: "空闲", note: "收在下面" },
         ];
 
-        return h("div", { className: "dtr-panel" },
+        // data-dsh-skin="off"：这块的颜色由本插件自己的主题表决定，
+        // 不跟着「主题与外观」换肤走，也别让它的壁纸透进来（约定见 dsh-plugin-skin README）。
+        return h("div", { className: "dtr-panel", "data-dsh-skin": "off" },
           h("div", { className: "dtr-panel-head" },
             h("div", null,
               h("h2", null, PANEL_LABEL),
@@ -2602,6 +2984,8 @@ ow` 由调用方传入），
         const rootRef = React.useRef(null);
         const cardRef = React.useRef(null);
         const dragRef = React.useRef(null);
+        /** 改大小时按下的起点（宽高 + 指针坐标）；null = 没在改。 */
+        const resizeRef = React.useRef(null);
         /** 刚拖过就别再当成一次点击（pointerup 之后紧跟的那个 click）。 */
         const suppressClickRef = React.useRef(false);
         const savedRef = React.useRef("");
@@ -2742,6 +3126,8 @@ ow` 由调用方传入），
           prevKindsRef.current = current;
           if (!previous) return; // 首帧不提醒：刷个页面就弹一堆通知最讨人厌
           if (view.settings.notify !== true) return;
+          // 「今天别再弹提醒」：只压系统通知，列表照常更新 —— 用户要的是"别打断我"，不是"别告诉我"。
+          if (isQuiet(memory, Date.now())) return;
           if (permission !== "granted") return;
           // 离开完成态的会话重新武装，这样同一个会话第二次跑完还会提醒。
           for (const id of [...notifiedRef.current]) {
@@ -2769,7 +3155,7 @@ ow` 由调用方传入），
               ctx.logger?.warn?.("task-radar: 系统通知失败", error);
             }
           }
-        }, [signature, view.settings.notify, permission, model.rows, openSession]);
+        }, [signature, view.settings.notify, permission, model.rows, openSession, memory.quietUntil]);
 
         // ── 位置：视口变化时重新夹一次 ───────────────────────────────────────
         React.useEffect(() => {
@@ -2868,6 +3254,83 @@ ow` 由调用方传入），
         const changeSettings = (patch) => setView((prev) => ({ ...prev, settings: { ...prev.settings, ...patch } }));
         const resetPosition = () => setView((prev) => ({ ...prev, pos: null }));
 
+        // ── 改大小：拖右下角那个把手 ────────────────────────────────────────
+        // 和"拖位置"分开两套：位置改的是 left/top，大小改的是宽高，
+        // 混在一起的写法会让边拖边跳（因为拖位置时卡片尺寸也在变）。
+        const beginResize = (event) => {
+          if (event.button !== undefined && event.button > 0) return;
+          const box = cardRef.current?.getBoundingClientRect?.();
+          resizeRef.current = {
+            w: box?.width ?? CARD_W,
+            h: box?.height ?? 320,
+            x: event.clientX,
+            y: event.clientY,
+          };
+          try {
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+          } catch {
+            /* 捕获失败也能拖，只是指针跑出把手后会断 */
+          }
+          event.preventDefault?.();
+          event.stopPropagation?.();
+        };
+
+        const moveResize = (event) => {
+          const start = resizeRef.current;
+          if (!start) return;
+          const next = normalizeSize({ w: start.w + (event.clientX - start.x), h: start.h + (event.clientY - start.y) });
+          if (!next) return;
+          setView((prev) => ({ ...prev, size: { w: next.w, h: next.h } }));
+        };
+
+        const endResize = (event) => {
+          if (!resizeRef.current) return;
+          resizeRef.current = null;
+          try {
+            event.currentTarget.releasePointerCapture?.(event.pointerId);
+          } catch {
+            /* 没捕获过就算了 */
+          }
+          // 变大了可能顶出视口，收尾时按新尺寸再夹一次位置。
+          setView((prev) => {
+            if (!prev.size) return prev;
+            const size = normalizeSize(prev.size);
+            if (!size) return prev;
+            const pos = prev.pos ? clampPos(prev.pos, size, { w: window.innerWidth, h: window.innerHeight }) : prev.pos;
+            return { ...prev, size, pos };
+          });
+        };
+
+        const resetSize = () => setView((prev) => ({ ...prev, size: null }));
+
+        // ── 让它安静：静音一条 / 我认这活做完了 / 今天别再提醒 ────────────────
+        const snoozeRow = (id) => setMemory((prev) => ({
+          ...prev,
+          snoozed: { ...(prev.snoozed ?? {}), [id]: Date.now() + SNOOZE_MS },
+        }));
+        const unsnoozeRow = (id) => setMemory((prev) => {
+          const snoozed = { ...(prev.snoozed ?? {}) };
+          delete snoozed[id];
+          return { ...prev, snoozed };
+        });
+        const unsnoozeAll = () => setMemory((prev) => ({ ...prev, snoozed: {} }));
+        const settleRow = (id) => {
+          // 「等你处理」不吃这一套：有人等你批东西，比"我说过做完了"要紧。
+          const row = modelRef.current?.rows?.find((item) => item.id === id);
+          if (row && row.kind === "waiting") return;
+          setMemory((prev) => ({ ...prev, settled: { ...(prev.settled ?? {}), [id]: Date.now() } }));
+        };
+        const restoreRow = (id) => setMemory((prev) => {
+          const settled = { ...(prev.settled ?? {}) };
+          delete settled[id];
+          return { ...prev, settled };
+        });
+        const restoreAll = () => setMemory((prev) => ({ ...prev, settled: {} }));
+        const setQuietToday = (on) => setMemory((prev) => ({
+          ...prev,
+          quietUntil: on ? endOfToday(Date.now()) : 0,
+        }));
+
         const askNotify = () => {
           try {
             const result = Notification.requestPermission?.((value) => setPermission(value ?? notifyState()));
@@ -2895,7 +3358,7 @@ ow` 由调用方传入），
           const empty = model.counts.waiting + model.counts.running + model.counts.done === 0;
           return h(
             "div",
-            { className: "dtr", style: anchor, ref: rootRef },
+            { className: "dtr", style: { ...anchor, ...borderStyle(view.theme) }, ref: rootRef, "data-dsh-skin": "off" },
             h("div", { className: "dtr-sr", "aria-live": "polite" }, announce),
             h(
               "button",
@@ -2945,7 +3408,11 @@ ow` 由调用方传入），
           onOpen: openSession,
           onToggleExpand: toggleExpand,
           onTogglePlan: togglePlan,
+          onSnooze: snoozeRow,
+          onSettle: settleRow,
+          onRestore: restoreRow,
         });
+
 
         // 一棵树：来源代理 → 会话 →（默认摊开）子代理；workspace 只在行尾。
         for (const group of model.groups) {
@@ -2971,6 +3438,9 @@ ow` 由调用方传入），
               onOpen: openSession,
               onToggleExpand: toggleExpand,
               onTogglePlan: togglePlan,
+              onSnooze: snoozeRow,
+              onSettle: settleRow,
+              onRestore: restoreRow,
             }));
           });
           if (group.hidden > 0) {
@@ -3007,6 +3477,34 @@ ow` 由调用方传入），
           );
         }
 
+        // 我收工的那些：沉在最后，默认收起。收起来不是删掉 —— 会话还在，点行照样进得去。
+        if (model.settled.length > 0) {
+          const expanded = view.settledOpen === true;
+          rowList.push(
+            h(
+              "div",
+              { key: "settled", className: "dtr-idle" },
+              h(
+                "button",
+                {
+                  type: "button",
+                  className: "dtr-acc",
+                  "data-open": expanded ? "true" : "false",
+                  "aria-expanded": expanded,
+                  title: "我手动标成做完的任务（会话还在，点行照样能进）",
+                  onClick: () => setView((prev) => ({ ...prev, settledOpen: !prev.settledOpen })),
+                },
+                h(Icon, { name: "chevron", size: 11 }),
+                h("span", null, "已收工"),
+                h("span", { className: "dtr-acccount" }, String(model.settled.length)),
+              ),
+              expanded
+                ? model.settled.slice(0, MAX_IDLE_ROWS).map((row) => h(Row, { key: "settled:" + row.id, ...rowProps(row, "") }))
+                : null,
+            ),
+          );
+        }
+
         // 宿主没下发钩子时，别只在控制台里嘀咕一声就画个空壳 —— 面板上要说清楚，
         // 否则用户只会觉得"这东西坏了"，而问题其实在插件之外（profile 没装全 / 宿主版本不匹配）。
         const notice = !listHook
@@ -3032,9 +3530,9 @@ ow` 由调用方传入），
           ? h(
             "div",
             { key: "foot", className: "dtr-foot" },
-            h("span", null, model.totals.sessions + " 个会话"),
+            h("span", { key: "sn", className: "dtr-foot-sessions" }, model.totals.sessions + " 个会话"),
             model.totals.subagents > 0 ? h("span", { key: "s", className: "dtr-foot-sep" }) : null,
-            model.totals.subagents > 0 ? h("span", { key: "n" }, model.totals.subagents + " 个子代理") : null,
+            model.totals.subagents > 0 ? h("span", { key: "n", className: "dtr-foot-subs" }, model.totals.subagents + " 个子代理") : null,
             model.totals.tokensKnown
               ? h("span", { key: "ts", className: "dtr-foot-sep" })
               : null,
@@ -3056,17 +3554,36 @@ ow` 由调用方传入），
                 title: `本周（周一起）新跑出来的量，共 ${formatTokens(usageTotals.week)} tok；今天 ${formatTokens(usageTotals.today)} tok；记了 ${usageTotals.days} 天`,
               }, "本周 " + formatTokens(usageTotals.week))
               : null,
+            model.counts.snoozed > 0
+              ? h(
+                "button",
+                {
+                  key: "snz",
+                  type: "button",
+                  className: "dtr-foot-snooze",
+                  title: `还有 ${model.counts.snoozed} 条在静音里（点一下全部恢复）`,
+                  "aria-label": `恢复 ${model.counts.snoozed} 条被静音的任务`,
+                  onClick: (event) => {
+                    event.stopPropagation?.();
+                    unsnoozeAll();
+                  },
+                },
+                "静音 " + model.counts.snoozed,
+              )
+              : null,
             live ? h("span", { key: "live", className: "dtr-foot-live", "data-busy": "true" }, "live") : null,
           )
           : null;
 
         return h(
           "div",
-          { className: "dtr", style: anchor, ref: rootRef },
+          { className: "dtr", style: { ...anchor, ...borderStyle(view.theme) }, ref: rootRef, "data-dsh-skin": "off" },
           h("div", { className: "dtr-sr", "aria-live": "polite" }, announce),
           // 装饰画排在卡片之前：它压在卡片下面的那半截会被卡片实心背景盖住，
           // 露出来的正好是"从卡沿外探进来"的那一部分。
-          h(CardDeco, { preset: view.theme.preset, slot: "card" }),
+          // 框被拖到很小时，人像相对窗口就成了主角（132×176 的图放在 240 宽的框旁边太抢）。
+          // 这个判断只能在这儿做：装饰层是卡片的兄弟节点，CSS 容器查询够不着它。
+          !view.size || Number(view.size.w) >= 300 ? h(CardDeco, { preset: view.theme.preset, slot: "card" }) : null,
           h(
             "div",
             {
@@ -3079,6 +3596,8 @@ ow` 由调用方传入），
                 opacity: Math.max(0.55, Math.min(1, Number(view.theme?.opacity ?? 100) / 100)),
                 // 底图自己的浓度跟着同一个滑杆走：55% 时退成淡淡一层，100% 时满幅。
                 "--dtr-art-alpha": String(0.32 + 0.68 * Math.max(0, Math.min(1, (Number(view.theme?.opacity ?? 100) - 55) / 45))),
+                // 用户拖过右下角才给宽高；没拖过就让 CSS 那套自适应（宽度固定、高度跟内容）生效。
+                ...sizeStyle(view.size),
               },
               ref: cardRef,
               role: "region",
@@ -3179,10 +3698,37 @@ ow` 由调用方传入），
                   notifyState: permission,
                   onAskNotify: askNotify,
                   onReset: resetPosition,
+          onResetSize: resetSize,
+          hasSize: Boolean(view.size),
+          quiet: isQuiet(memory, now),
+          quietUntil: Number(memory.quietUntil ?? 0),
+          snoozed: model.snoozed.slice(),
+          onQuiet: setQuietToday,
+          onUnsnooze: unsnoozeRow,
+          onUnsnoozeAll: unsnoozeAll,
+          settledCount: model.counts.settled,
+          onRestoreAll: restoreAll,
                 })
                 : (notice ? [notice, ...rowList] : rowList),
             ),
             settingsOpen || !foot ? null : foot,
+            // 右下角那颗把手：拖它改框体大小。默认就浅浅露出来 ——
+            // 藏在 hover 里的话，"调不了"的人永远找不到入口。
+            h("span", {
+              key: "grip",
+              className: "dtr-grip",
+              role: "separator",
+              "aria-label": "拖动调整框体大小（双击恢复默认）",
+              title: "拖动调整大小（双击恢复默认）",
+              onPointerDown: beginResize,
+              onPointerMove: moveResize,
+              onPointerUp: endResize,
+              onPointerCancel: endResize,
+              onDoubleClick: (event) => {
+                event.stopPropagation?.();
+                resetSize();
+              },
+            }),
           ),
         );
       };
@@ -3276,6 +3822,16 @@ ow` 由调用方传入），
     exports.snapPos = snapPos;
     exports.readStore = readStore;
     exports.writeStore = writeStore;
+    exports.isSnoozed = isSnoozed;
+    exports.isSettled = isSettled;
+    exports.isQuiet = isQuiet;
+    exports.endOfToday = endOfToday;
+    exports.formatUntil = formatUntil;
+    exports.SNOOZE_MS = SNOOZE_MS;
+    exports.normalizeSize = normalizeSize;
+    exports.sizeStyle = sizeStyle;
+    exports.normalizeBorder = normalizeBorder;
+    exports.borderStyle = borderStyle;
     exports.memorySignature = memorySignature;
     exports.makeRadar = makeRadar;
     return module.exports;

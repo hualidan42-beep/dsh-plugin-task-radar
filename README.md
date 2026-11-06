@@ -10,6 +10,9 @@ DSH Web 插件：一个可以拖动、折叠的任务浮窗，以及主区工作
 - 查看待办清单、子代理、模型标签和 Token 用量，点击直达会话。
 - 本地记录今天、本周、本月的 Token 增量，首次观察只建基线，不补算历史。
 - 可选系统通知、浮窗外观和主题插画；首次安装默认「桂花月兔」。
+- 边框粗细（0–3px）和颜色可调，默认跟随主题，可一键恢复。
+- 框体大小拖右下角把手即可改（240–560 × 160–760），双击复位。
+- 干扰控制：单条会话静音 1 小时、「我认这活做完了」收工、今天不再弹系统通知。
 - 可选联动 `dsh-plugin-skin`；未安装时仍可独立使用任务监控与浮窗外观。
 
 ![主区面板](https://raw.githubusercontent.com/hualidan42-beep/dsh-plugin-task-radar/main/docs/panel.png)
@@ -24,15 +27,15 @@ DSH Web 插件：一个可以拖动、折叠的任务浮窗，以及主区工作
 https://raw.githubusercontent.com/hualidan42-beep/dsh-plugin-task-radar/main/market-index.json
 ```
 
-然后找到“工作小管家”点击安装。本索引固定到已验证的完整 Git commit，不依赖会变化的分支；这是作者自定义索引，不是 DSH 官方市场。
+然后找到“工作小管家”点击安装。索引里的每个版本都指向 npm 上的精确版本号，并记录真实发布时间；这是作者自定义索引，不是 DSH 官方市场。
 
-也可在 DSH 插件管理器中使用固定提交的 Git 安装源：
+也可以直接装 npm 包：
 
-```text
-git+https://github.com/hualidan42-beep/dsh-plugin-task-radar.git#45971482006ef29e594a835939a7edd8fa85abb8
+```powershell
+dsh plugin --profile <你的-profile> add "dsh-plugin-task-radar@0.10.0"
 ```
 
-该安装源已固定到首次发布提交。安装 bundle 后默认选中启用，是否刷新或重启以宿主提示为准。不需要手工建立 junction 或覆盖 profile 文件。
+安装 bundle 后默认选中启用，是否刷新或重启以宿主提示为准。不需要手工建立 junction 或覆盖 profile 文件。
 
 ## 数据与权限
 
@@ -59,10 +62,11 @@ npm run verify
 npm pack --dry-run --ignore-scripts
 ```
 
-发布前最近一次结果为 219 项单元断言、126 项装配断言通过。单测/假 DOM 测试不替代真实 DSH 的浏览器安装验收。
+发布前最近一次结果为 250 项单元断言、164 项装配断言通过。单测/假 DOM 测试不替代真实 DSH 的浏览器安装验收。
 
 ## 更新记录
 
+- **0.10.0**：边框粗细与颜色可调；框体大小可拖拽调整（双击复位）；新增静音 1 小时、会话收工、今日免打扰三种干扰控制。
 - **0.7.1**：首次安装的默认外观改为「桂花月兔」（原先跟随宿主）；已经选过主题的用户不受影响。
 - **0.7.0**：首个公开发布版本。
 

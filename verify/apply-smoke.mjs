@@ -491,6 +491,45 @@ check(rootStyle.left >= 16 && rootStyle.top >= 16, "拖拽: 夹在视口内", ro
 const saved = JSON.parse(store.get(radar.STORAGE_KEY) ?? "{}");
 check(saved.view?.pos?.x === rootStyle.left && saved.view?.pos?.y === rootStyle.top, "拖拽: 位置落盘", saved.view?.pos);
 
+// ── 改大小：拖右下角那颗把手 ────────────────────────────────────────────────
+// 卡片本身没有真实尺寸（假 DOM），把手按 CARD_W 兜底 —— 这里只验"拖了会变、会落盘、能复位"。
+const grip = withClass(tree, "dtr-grip")[0];
+check(Boolean(grip), "改大小: 卡片右下角有把手（不然用户根本找不到入口）");
+check(grip.props.role === "separator" && String(grip.props["aria-label"]).includes("大小"), "改大小: 把手对读屏有名字");
+grip.props.onPointerDown(fakeEvent(900, 700));
+grip.props.onPointerMove(fakeEvent(1_020, 820));
+grip.props.onPointerUp(fakeEvent(1_020, 820));
+tree = hydrate(ReactStub.render(captured.component, props));
+const sizedCard = withClass(tree, "dtr-card")[0];
+check(sizedCard.props.style.width === "300px" || /^\d+px$/.test(String(sizedCard.props.style.width)), "改大小: 拖完宽高变成了具体像素", sizedCard.props.style.width);
+check(sizedCard.props.style.maxHeight === "none", "改大小: 固定高度时要撤掉 max-height（否则高度还能被内容压回去）");
+const sizedSaved = JSON.parse(store.get(radar.STORAGE_KEY));
+check(Number.isFinite(sizedSaved.view.size.w) && Number.isFinite(sizedSaved.view.size.h), "改大小: 宽高落盘", sizedSaved.view.size);
+// 双击把手复位
+withClass(tree, "dtr-grip")[0].props.onDoubleClick(fakeEvent(0, 0));
+tree = hydrate(ReactStub.render(captured.component, props));
+check(JSON.parse(store.get(radar.STORAGE_KEY)).view.size === null, "改大小: 双击把手恢复默认");
+check(withClass(tree, "dtr-card")[0].props.style.width === undefined, "改大小: 复位后回到 CSS 那套自适应");
+
+// 设置页里得写清楚这个入口在哪 —— 用户当初就是「调不了」而是根本没找到。
+buttonByLabel(tree, "工作小管家设置").props.onClick();
+tree = hydrate(ReactStub.render(captured.component, props));
+const settingsText = textOf(tree);
+check(settingsText.includes("右下角"), "改大小: 设置页里写着把手在哪", settingsText.slice(0, 200));
+const hasResetSize = findAll(tree, (element) => textOf(element) === "把框体大小恢复默认↺").length + findAll(tree, (element) => typeof element.props?.onClick === "function" && textOf(element).includes("把框体大小恢复默认")).length;
+check(hasResetSize === 0, "改大小: 没调过就不留「恢复默认大小」的空按钮");
+buttonByLabel(tree, "返回列表").props.onClick();
+tree = hydrate(ReactStub.render(captured.component, props));
+withClass(tree, "dtr-grip")[0].props.onPointerDown(fakeEvent(900, 700));
+withClass(tree, "dtr-grip")[0].props.onPointerMove(fakeEvent(950, 760));
+withClass(tree, "dtr-grip")[0].props.onPointerUp(fakeEvent(950, 760));
+tree = hydrate(ReactStub.render(captured.component, props));
+buttonByLabel(tree, "工作小管家设置").props.onClick();
+tree = hydrate(ReactStub.render(captured.component, props));
+check(findAll(tree, (element) => typeof element.props?.onClick === "function" && textOf(element).includes("把框体大小恢复默认")).length === 1, "改大小: 调过之后设置里出现「把框体大小恢复默认」");
+buttonByLabel(tree, "返回列表").props.onClick();
+tree = hydrate(ReactStub.render(captured.component, props));
+
 // 拖完会短暂抑制"松手后的 click"，这里把那个 500ms 的定时器跑掉（真浏览器里等半秒即可）。
 for (const timer of timers) {
   if (timer.period === "timeout" && timer.cleared === false) {
@@ -551,19 +590,96 @@ buttonByLabel(tree, "工作小管家设置").props.onClick();
 tree = hydrate(ReactStub.render(captured.component, props));
 text = textOf(tree);
 check(text.includes("显示空闲会话") && text.includes("完成时弹系统通知") && !text.includes("子代理单独成行"), "设置: 两个开关都在（子代理改成逐行展开，不再占一个全局开关）");
-const switches = findAll(tree, (element) => element.props?.role === "switch");
-check(switches.length === 2 && switches[1].props["aria-checked"] === true, "设置: 开关状态取自本地设置");
-switches[1].props.onClick(); // 关掉系统通知
+// 开关按"文字"取：这个面板的开关会继续加（空闲 / 通知 / 今天别再弹），按下标取迟早错位。
+const switchByLabel = (node, label) => findAll(node, (element) => element.props?.role === "switch" && textOf(element).includes(label))[0];
+check(Boolean(switchByLabel(tree, "显示空闲会话")) && Boolean(switchByLabel(tree, "完成时弹系统通知")), "设置: 两个老开关都在");
+check(switchByLabel(tree, "完成时弹系统通知").props["aria-checked"] === true, "设置: 开关状态取自本地设置");
+switchByLabel(tree, "完成时弹系统通知").props.onClick(); // 关掉系统通知
 tree = hydrate(ReactStub.render(captured.component, props));
-check(findAll(tree, (element) => element.props?.role === "switch")[1].props["aria-checked"] === false, "设置: 关掉通知后状态落下来");
+check(switchByLabel(tree, "完成时弹系统通知").props["aria-checked"] === false, "设置: 关掉通知后状态落下来");
 check(JSON.parse(store.get(radar.STORAGE_KEY)).view.settings.notify === false, "设置: 通知开关落盘");
 // 再打开，后面要测通知
-findAll(tree, (element) => element.props?.role === "switch")[1].props.onClick();
+switchByLabel(tree, "完成时弹系统通知").props.onClick();
 tree = hydrate(ReactStub.render(captured.component, props));
+
+// ── 边框：用户自己调粗细 / 颜色 ──────────────────────────────────────────────
+const borderSlider = findAll(tree, (element) => element.props?.["aria-label"] === "边框粗细")[0];
+check(Boolean(borderSlider), "边框: 设置里有粗细滑杆");
+check(borderSlider.props.min === 0 && borderSlider.props.max === 3, "边框: 滑杆范围 0~3px（0 就是不要边框）", [borderSlider.props.min, borderSlider.props.max]);
+check(borderSlider.props.value === 1, "边框: 没设过时滑杆停在主题那一档（1px）", borderSlider.props.value);
+borderSlider.props.onChange({ target: { value: "3" } });
+tree = hydrate(ReactStub.render(captured.component, props));
+check(JSON.parse(store.get(radar.STORAGE_KEY)).view.theme.border.width === 3, "边框: 拖到 3px 会落盘");
+
+const colorInput = findAll(tree, (element) => element.props?.["aria-label"] === "边框颜色")[0];
+check(Boolean(colorInput) && colorInput.props.type === "color", "边框: 有原生取色器（能取屏幕任意一点，比自己画格子有用）");
+colorInput.props.onChange({ target: { value: "#8a5a12" } });
+tree = hydrate(ReactStub.render(captured.component, props));
+check(JSON.parse(store.get(radar.STORAGE_KEY)).view.theme.border.color === "#8a5a12", "边框: 颜色落盘");
+
+const borderRootStyle = tree.props.style ?? {};
+check(borderRootStyle["--dtr-border-w"] === "3px", "边框: 粗细变成根节点上的 --dtr-border-w（卡片和胶囊都吃这个变量）", borderRootStyle);
+check(borderRootStyle["--dtr-border-color"] === "#8a5a12", "边框: 颜色变成 --dtr-border-color", borderRootStyle);
+// ── 让它安静：静音 / 我认这活做完了 / 今天别再弹 ──────────────────────────────
+// 三颗钉子都在设置里；每行 hover 出的两颗在列表里（静音、收工）。
+const quietSwitch = switchByLabel(tree, "今天别再弹提醒");
+check(Boolean(quietSwitch), "安静: 设置里有「今天别再弹提醒」");
+check(quietSwitch.props["aria-checked"] === false, "安静: 默认不静音");
+quietSwitch.props.onClick();
+tree = hydrate(ReactStub.render(captured.component, props));
+const quietSaved = JSON.parse(store.get(radar.STORAGE_KEY)).memory;
+check(Number.isFinite(quietSaved.quietUntil) && quietSaved.quietUntil > Date.now(), "安静: 打开后落盘到「明天 0 点」", quietSaved.quietUntil);
+check(textOf(tree).includes("到明天"), "安静: 设置页写着什么时候恢复", textOf(tree).slice(0, 200));
+// 关掉，后面还要测通知
+switchByLabel(tree, "今天别再弹提醒").props.onClick();
+tree = hydrate(ReactStub.render(captured.component, props));
+check(JSON.parse(store.get(radar.STORAGE_KEY)).memory.quietUntil === 0, "安静: 再点一下立刻恢复");
+
 // 回到列表
 buttonByLabel(tree, "返回列表").props.onClick();
 tree = hydrate(ReactStub.render(captured.component, props));
 check(withClass(tree, "dtr-row").length >= 2 && withClass(tree, "dtr-grouphead").length >= 1 && withClass(tree, "dtr-set").length === 0, "设置: 能切回树（分组标题回来了、设置面板退场）", withClass(tree, "dtr-row").length);
+
+// ── 行上那两颗钉子：静音一小时 / 我认这活做完了 ───────────────────────────────
+const actButtons = findAll(tree, (element) => String(element.props?.["aria-label"] ?? "").startsWith("静音 1 小时"));
+check(actButtons.length >= 1, "钉子: 每行都有「静音 1 小时」（hover 才显示）");
+const snoozeTarget = actButtons[0];
+const snoozeRowEl = snoozeTarget.props;
+snoozeRowEl.onClick({ stopPropagation() {} });
+tree = hydrate(ReactStub.render(captured.component, props));
+const snoozedIds = Object.keys(JSON.parse(store.get(radar.STORAGE_KEY)).memory.snoozed ?? {});
+check(snoozedIds.length === 1, "钉子: 静音落盘（一条）", snoozedIds);
+check(withClass(tree, "dtr-foot-snooze").length === 1, "钉子: 卡底出现「静音 1」，不是默默消失");
+check(textOf(withClass(tree, "dtr-foot-snooze")[0]).includes("静音 1"), "钉子: 卡底写着静音了几条");
+// 点一下卡底那颗，全部恢复
+withClass(tree, "dtr-foot-snooze")[0].props.onClick({ stopPropagation() {} });
+tree = hydrate(ReactStub.render(captured.component, props));
+check(Object.keys(JSON.parse(store.get(radar.STORAGE_KEY)).memory.snoozed ?? {}).length === 0, "钉子: 点卡底那颗就恢复");
+check(withClass(tree, "dtr-foot-snooze").length === 0, "钉子: 恢复后卡底那颗消失");
+
+// 收工：行从主列表进「已收工」，不占四个状态格
+// 「等你处理」的行不参与收工：有人要你批东西，比"我说过做完了"要紧。
+const waitingItem = withClass(tree, "dtr-item").find((node) => textOf(node).includes("待批准"));
+const waitingSettle = findAll(waitingItem, (element) => element.props?.["aria-label"] === "标记完成")[0];
+check(waitingSettle === undefined, "钉子: 等你处理的行**不画**「标记完成」（按了不生效的按钮比没有更糟）");
+check(findAll(waitingItem, (element) => element.props?.["aria-label"] === "静音 1 小时").length === 1, "钉子: 等审批的行仍然可以静音");
+
+const normalItem = withClass(tree, "dtr-item").find((node) => !textOf(node).includes("待批准"));
+const settleTarget = findAll(normalItem, (element) => element.props?.["aria-label"] === "标记完成")[0];
+check(Boolean(settleTarget), "钉子: 非等待的行有「标记完成」");
+settleTarget.props.onClick({ stopPropagation() {} });
+tree = hydrate(ReactStub.render(captured.component, props));
+const settledAcc = withClass(tree, "dtr-acc").find((node) => textOf(node).includes("已收工"));
+check(Boolean(settledAcc) && textOf(settledAcc).includes("1"), "钉子: 列表底部出现「已收工 1」", textOf(settledAcc ?? { props: {} }));
+settledAcc.props.onClick();
+tree = hydrate(ReactStub.render(captured.component, props));
+const settledItems = withClass(tree, "dtr-item").filter((node) => node.props?.["data-settled"] === "true");
+check(settledItems.length === 1, "钉子: 收工的那行带 data-settled（视觉上有删除线）");
+const restoreBtn = findAll(tree, (element) => element.props?.["aria-label"] === "恢复")[0];
+check(Boolean(restoreBtn), "钉子: 收工的行上给的是「恢复」");
+restoreBtn.props.onClick({ stopPropagation() {} });
+tree = hydrate(ReactStub.render(captured.component, props));
+check(Object.keys(JSON.parse(store.get(radar.STORAGE_KEY)).memory.settled ?? {}).length === 0, "钉子: 恢复后收工记录清掉");
 
 // ── 分组折叠 ─────────────────────────────────────────────────────────────────
 const rowsBefore = withClass(tree, "dtr-row").length;
@@ -609,6 +725,10 @@ const panelTree = hydrate(ReactStub.render(Panel, props));
 const panelText = textOf(panelTree);
 
 check(withClass(panelTree, "dtr-panel").length === 1, "面板: 渲染出面板根节点");
+check(
+  withClass(panelTree, "dtr-panel")[0].props["data-dsh-skin"] === "off",
+  "面板: 标了 data-dsh-skin=\"off\"（不跟「主题与外观」换肤、也不透它的壁纸）"
+);
 check(panelText.includes("工作小管家"), "面板: 标题也叫工作小管家（别跟侧栏行对不上）");
 check(panelText.includes("等你处理") && panelText.includes("正在跑") && panelText.includes("刚完成"), "面板: 三个状态分组都在");
 check(panelText.includes("重写鉴权中间件"), "面板: 列出正在跑的会话");

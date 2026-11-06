@@ -286,7 +286,7 @@ const model = radar.buildModel({
   settings: { showIdle: true, notify: true },
 });
 
-check(same(model.counts, { waiting: 1, running: 1, done: 1, idle: 0, total: 3 }), "buildModel: 分段计数（空会话/归档/子代理都不算行）", model.counts);
+check(same(model.counts, { waiting: 1, running: 1, done: 1, idle: 0, total: 3, snoozed: 0, settled: 0 }), "buildModel: 分段计数（空会话/归档/子代理都不算行）", model.counts);
 check(model.sections.waiting[0].id === "wait" && model.sections.waiting[0].waitLabel === "待批准", "buildModel: 等你处理带短标签");
 check(model.sections.running[0].id === "run", "buildModel: 正在跑");
 check(model.sections.running[0].workspace === "skill", "buildModel: 行尾工作区标签", model.sections.running[0].workspace);
@@ -448,7 +448,72 @@ check(radar.readStore("keep").view.theme.preset === "raven", "readStore: 用户�
 store.set("dirty", JSON.stringify({ view: { theme: { preset: "no-such-theme" } } }));
 check(radar.readStore("dirty").view.theme.preset === "osmanthus", "readStore: 主题名不认识就退回默认（不是留着坏值渲染一屏没样式）");
 
+// ── 边框：用户自己调粗细 / 颜色 ──────────────────────────────────────────────
+check(same(fresh.view.theme.border, { width: null, color: "" }), "边框: 默认是「跟随主题」（两个字段都空），不硬塞 1px");
+check(same(radar.normalizeBorder({ width: 9 }), { width: 3, color: "" }), "边框: 粗细封顶 3px");
+check(same(radar.normalizeBorder({ width: -4 }), { width: 0, color: "" }), "边框: 0 是合法值（= 不要边框），负数夹到 0");
+check(radar.normalizeBorder({ width: 2.4 }).width === 2, "边框: 小数取整，不出现 1.5px 的毛边");
+check(same(radar.normalizeBorder({ width: "abc" }), { width: null, color: "" }), "边框: 粗细是脏值就当没设过（滑杆还能回到「跟随主题」）");
+check(radar.normalizeBorder({ color: "#8A5A12" }).color === "#8a5a12", "边框: 颜色统一小写");
+check(radar.normalizeBorder({ color: "#abc" }).color === "#abc", "边框: 三位十六进制也收");
+check(radar.normalizeBorder({ color: "red" }).color === "" && radar.normalizeBorder({ color: "url(x)" }).color === "", "边框: 非十六进制一律不收（内联样式不塞任意字符串）");
+store.set("border", JSON.stringify({ view: { theme: { preset: "raven", border: { width: 2, color: "#8a5a12" } } } }));
+check(same(radar.readStore("border").view.theme.border, { width: 2, color: "#8a5a12" }), "边框: 粗细和颜色都能存下来再读回去");
+check(
+  Object.keys(radar.borderStyle({ border: { width: null, color: "" } })).length === 0,
+  "边框: 没设过就不往内联样式里放东西（主题自己那圈 --dtr-ring 才有机会生效）",
+);
+check(
+  same(radar.borderStyle({ border: { width: 3, color: "#8a5a12" } }), { "--dtr-border-w": "3px", "--dtr-border-color": "#8a5a12" }),
+  "边框: 设过就是两个自定义属性（卡片和胶囊吃同一份）",
+);
+
+// ── 框体大小：用户拖右下角改大小 ──────────────────────────────────────────────
+check(fresh.view.size === null, "框体大小: 默认是 null（宽度写死在 CSS、高度跟内容，不自适应就废了）");
+check(same(radar.normalizeSize({ w: 999, h: 999 }), { w: 560, h: 760 }), "框体大小: 上限夹住（再大就不像小窗了）");
+check(same(radar.normalizeSize({ w: 10, h: 10 }), { w: 240, h: 160 }), "框体大小: 下限夹住（240 是标题还能认出三个字的底线）");
+check(radar.normalizeSize({ w: 431.6, h: 300.4 }).w === 432, "框体大小: 取整，不存 431.98437px 那种毛值");
+check(radar.normalizeSize({ w: "big", h: 300 }) === null && radar.normalizeSize(null) === null, "框体大小: 脏值当没设过");
+store.set("size", JSON.stringify({ view: { size: { w: 420, h: 500 } } }));
+check(same(radar.readStore("size").view.size, { w: 420, h: 500 }), "框体大小: 存下来再读回去");
+check(Object.keys(radar.sizeStyle(null)).length === 0, "框体大小: 没拖过就不给内联宽高");
+check(
+  same(radar.sizeStyle({ w: 420, h: 500 }), { width: "420px", height: "500px", maxHeight: "none" }),
+  "框体大小: 拖过之后是固定宽高（不是只把上限抬高 —— 用户要的是「这个框多大」）",
+);
+
 // ── 换肤桥：normalizeSkinSnapshot ────────────────────────────────────────────
+// ── 让它安静：静音 / 收工 / 今天别再弹 ──────────────────────────────────────
+{
+  const nowQuiet = 1_000_000;
+  check(radar.isSnoozed({ snoozed: { a: nowQuiet + 1 } }, "a", nowQuiet) === true, "安静: 静音没过期就还在静音里");
+  check(radar.isSnoozed({ snoozed: { a: nowQuiet - 1 } }, "a", nowQuiet) === false, "安静: 到点自动解除，不用手动清");
+  check(radar.isSnoozed({}, "a", nowQuiet) === false, "安静: 没静音过就是 false");
+  check(radar.isSettled({ settled: { a: 5 } }, "a") === true && radar.isSettled({ settled: { a: 0 } }, "a") === false, "安静: 收工记录认时间戳");
+  check(radar.isQuiet({ quietUntil: nowQuiet + 10 }, nowQuiet) === true && radar.isQuiet({ quietUntil: 0 }, nowQuiet) === false, "安静: 「今天别再弹」是有窗口的");
+  const end = radar.endOfToday(nowQuiet);
+  check(end > nowQuiet && new Date(end).getHours() === 0 && new Date(end).getMinutes() === 0, "安静: 窗口到明天 0 点（本地时区）", new Date(end).toString());
+  check(String(radar.formatUntil(nowQuiet, nowQuiet)).startsWith("到 "), "安静: 恢复时刻写成「到 15:20」这种", radar.formatUntil(nowQuiet, nowQuiet));
+
+  // 静音的会话不占行；收工的不进四个状态格，但有人等你批东西时仍然要冒出来。
+  const quietModel = radar.buildModel({
+    list: { ids: ["mute", "shut", "ask"], byId: {
+      mute: { id: "mute", displayTitle: "静音的那条", updatedAt: 1 },
+      shut: { id: "shut", displayTitle: "我收工了", updatedAt: 1 },
+      ask: { id: "ask", displayTitle: "又找我要审批", updatedAt: 1 },
+    }, projectionsBySession: {} },
+    statuses: new Map([["ask", { running: false, pendingInteraction: { kind: "approval" } }]]),
+    workspaces: EMPTY(),
+    memory: { running: {}, finished: {}, opened: {}, snoozed: { mute: nowQuiet + 10_000 }, settled: { shut: 1, ask: 1 }, quietUntil: 0 },
+    now: nowQuiet,
+  });
+  check(quietModel.rows.every((row) => row.id !== "mute"), "安静: 静音中的会话不占行");
+  check(quietModel.counts.snoozed === 1 && quietModel.snoozed[0].id === "mute", "安静: 但会记下来，好在界面上说「还有 1 条被静音」");
+  check(quietModel.counts.settled === 1 && quietModel.settled[0].id === "shut", "安静: 收工的进「已收工」那一栏，不占状态格");
+  check(quietModel.counts.waiting === 1, "安静: 收工过的会话又开始等审批 → 照样冒出来（审批比「我说做完了」要紧）", quietModel.counts);
+  check(quietModel.rows.find((row) => row.id === "ask")?.settled !== true, "安静: 冒出来的那条不带收工斜线");
+}
+
 /**
  * 这一段钉的是"对方给什么都不能把面板画崩"。
  *
