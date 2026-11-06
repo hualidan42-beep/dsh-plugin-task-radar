@@ -96,6 +96,42 @@
           "engines": {}
         }
       ]
+    },
+    {
+      "name": "dsh-plugin-gzh-studio",
+      "title": {
+        "en": "New Media Workbench",
+        "zh-cn": "新媒体工作台"
+      },
+      "description": {
+        "en": "Write, illustrate, review and hand off WeChat / short-video content: 21 compliance tracks, per-image versions, mobile-width preview, draft push and video preview.",
+        "zh-cn": "面向公众号与短视频的内容工作台：21 条赛道合规检查、逐张出图与版本留存、手机宽度预览、推公众号草稿、视频成片预览。"
+      },
+      "author": "hualidan42-beep",
+      "homepage": "https://github.com/hualidan42-beep/dsh-plugin-gzh-studio",
+      "repository": {
+        "url": "https://github.com/hualidan42-beep/dsh-plugin-gzh-studio"
+      },
+      "metadata": {
+        "keywords": [
+          "dsh",
+          "wechat",
+          "gzh",
+          "workbench",
+          "content"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.2.0",
+          "publishTimestamp": 1793960804,
+          "source": {
+            "type": "npm",
+            "registry": "https://registry.npmjs.org/"
+          },
+          "engines": {}
+        }
+      ]
     }
   ]
 }
