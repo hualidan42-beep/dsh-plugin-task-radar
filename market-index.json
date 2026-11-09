@@ -150,6 +150,41 @@
           "engines": {}
         }
       ]
+    },
+    {
+      "name": "dsh-plugin-archive-shelf",
+      "title": {
+        "en": "Archive Shelf",
+        "zh-cn": "归藏"
+      },
+      "description": {
+        "en": "List archived DSH sessions, read what was said, and restore one to keep chatting. Read-only.",
+        "zh-cn": "把归档掉的会话列出来、看清聊了什么，一键放出来接着聊（只读，归档集合仍由宿主维护）。"
+      },
+      "author": "hualidan42-beep",
+      "homepage": "https://github.com/hualidan42-beep/dsh-plugin-archive-shelf",
+      "repository": {
+        "url": "https://github.com/hualidan42-beep/dsh-plugin-archive-shelf"
+      },
+      "metadata": {
+        "keywords": [
+          "dsh",
+          "archive",
+          "session",
+          "归档"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1794209912,
+          "source": {
+            "type": "npm",
+            "registry": "https://registry.npmjs.org/"
+          },
+          "engines": {}
+        }
+      ]
     }
   ]
 }
