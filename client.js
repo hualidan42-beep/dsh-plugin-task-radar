@@ -333,6 +333,9 @@ const PANEL_LABEL = "工作小管家";
           label: item.label,
           note: typeof item.note === "string" ? item.note : "",
           kind: item.kind === "css" ? "css" : "image",
+          // 缩略图是可选的：老版本主题插件不广播它们，下面会退回纯文字药丸。
+          thumb: typeof item.thumb === "string" ? item.thumb : "",
+          preview: typeof item.preview === "string" ? item.preview : "",
         }));
       return {
         skin: current,
@@ -342,6 +345,17 @@ const PANEL_LABEL = "工作小管家";
         wallpaper: typeof raw.wallpaper === "string" ? raw.wallpaper : "",
         skins,
         wallpapers,
+        // 自定义配色的六个色：老版本主题插件没有这个字段，就当空对象。
+        // 同时记一个"对方到底支不支持"的标记：老版本不认 customColors 补丁，
+        // 面板里就不该摆一排点了没用的取色器。
+        supportsCustomColors: Boolean(raw.customColors && typeof raw.customColors === "object"),
+        customColors: raw.customColors && typeof raw.customColors === "object"
+          ? Object.fromEntries(
+            ["accent", "surface", "surface2", "sidebar", "text", "code"]
+              .filter((role) => typeof raw.customColors[role] === "string")
+              .map((role) => [role, raw.customColors[role]]),
+          )
+          : {},
       };
     }
 
@@ -631,7 +645,7 @@ const PANEL_LABEL = "工作小管家";
 .dtr-switch[data-on=true]>i{transform:translateX(12px)}
 
 /* ── 胶囊 ── */
-.dtr-pill{pointer-events:auto;display:inline-flex;align-items:center;gap:10px;height:32px;padding:0 13px;border-radius:999px;border-style:solid;border-width:var(--dtr-border-w,1px);border-color:var(--dtr-border-color,var(--dsw-alias-border-l2,rgba(15,23,42,.1)));background:var(--dsw-alias-bg-layer-1,#fff);box-shadow:0 8px 22px rgba(15,23,42,.16);cursor:grab;font:inherit;font-size:11px;font-weight:600;color:var(--dsw-alias-label-secondary,#4b5563);font-variant-numeric:tabular-nums;touch-action:none;user-select:none;transition:transform .12s ease,box-shadow .12s ease}
+.dtr-pill{pointer-events:auto;display:inline-flex;align-items:center;gap:10px;height:32px;padding:0 13px;border-radius:999px;border-style:solid;border-width:var(--dtr-border-w,1px);border-color:var(--dtr-border-color,var(--dsw-alias-border-l2,rgba(15,23,42,.1)));background-color:rgb(from var(--dsw-alias-bg-layer-1,#fff) r g b / 1);box-shadow:0 8px 22px rgba(15,23,42,.16);cursor:grab;font:inherit;font-size:11px;font-weight:600;color:var(--dsw-alias-label-secondary,#4b5563);font-variant-numeric:tabular-nums;touch-action:none;user-select:none;transition:transform .12s ease,box-shadow .12s ease}
 .dtr-pill:hover{transform:translateY(-1px);box-shadow:0 12px 28px rgba(15,23,42,.2)}
 .dtr-pill:active{transform:none}
 .dtr-pill:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#4d6bfe);outline-offset:2px}
@@ -643,19 +657,217 @@ const PANEL_LABEL = "工作小管家";
    下面主区面板的规则属于常规样式，不能落在它里面 —— 一失手，面板在
    正常环境下就等于没有样式（只剩浏览器默认的 h2 / button 外观）。 */
 @media (prefers-reduced-motion:reduce){.dtr-card{animation:none}.dtr-dot[data-k=running]{animation:none}.dtr-meter-track>i,.dtr-switch>i,.dtr-acc>svg,.dtr-kidsbtn>svg,.dtr-pill{transition:none}.dtr-pill:hover,.dtr-pill:active{transform:none}}
-/* ── 主区面板（不挂在 .dtr 浮动根上，走宿主普通文档流）── */
-.dtr-panel{padding:20px;max-width:860px;color:var(--dsw-alias-label-primary,#1f2328);font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif);font-size:13px;line-height:1.5;border-radius:14px;background-color:rgb(from var(--dsw-alias-bg-base,#fff) r g b / 1)}
-/* ── 可读性兜底：壁纸模式下宿主会把"表面"令牌的透明度压到 0.4~0.6（好让壁纸透出来），
-   但文字令牌还是实色。于是深色壁纸从面板底下透上来、字还在原地 —— 结果就是
-   「有些字看不见，鼠标移上去才看得见」（hover 换了个背景才在字后面垫上东西）。
-   下面这几个面承载的是必须读的字，所以用 relative color 语法 rgb(from … r g b)
-   把同一套令牌的 alpha 抹掉：色相仍然跟着宿主/皮肤走，面永远是实心的。
-   不认这个语法的引擎会整条丢弃、退回上面那条（原样），不会更糟。
-   只兜底"承载文字的面"；hover 层、选中态这些装饰性底色保持半透明。 */
-.dtr-head,.dtr-foot,.dtr-kids,.dtr-idle,.dtr-empty,.dtr-more,.dtr-set,.dtr-notice{background-color:rgb(from var(--dsw-alias-bg-layer-1,#fff) r g b / 1)}
-.dtr-pill{background-color:rgb(from var(--dsw-alias-bg-layer-1,#fff) r g b / 1)}
-.dtr-skin{background-color:rgb(from var(--dsw-alias-bg-layer-2,#f8fafc) r g b / 1)}
-.dtr-overview-cell,.dtr-panel-empty{background-color:rgb(from var(--dsw-alias-bg-layer-2,#f8fafc) r g b / 1)}
+/* ===== 主区面板 · 柔光纸 + 状态色 =====
+   只走宿主令牌（--dsw-*），每条都带中性兜底：有令牌时跟随明暗主题，
+   没令牌时也不会变成透明方块。壁纸挡在外面（data-dsh-skin="off"），
+   所以这里的底色一律是实心，字永远读得清。 */
+.dtr-panel{
+  --dtr-accent:var(--dsw-alias-state-business-primary,#4d6bfe);
+  --dtr-warm:var(--dsw-alias-state-warn-primary,#f59e0b);
+  --dtr-ok:var(--dsw-alias-state-success-primary,#16a34a);
+  --dtr-idle:var(--dsw-alias-state-idle-primary,#c9ced6);
+  --dtr-text:var(--dsw-alias-label-primary,#1f2328);
+  --dtr-text2:var(--dsw-alias-label-secondary,#4b5563);
+  --dtr-text3:var(--dsw-alias-label-tertiary,#8a9099);
+  --dtr-hair:var(--dsw-alias-border-l3,rgba(15,23,42,.08));
+  --dtr-line:var(--dsw-alias-border-l2,rgba(15,23,42,.12));
+  --dtr-paper:rgb(from var(--dsw-alias-bg-base,#fff) r g b / 1);
+  --dtr-card:rgb(from var(--dsw-alias-bg-layer-1,#fff) r g b / 1);
+  --dtr-soft:rgb(from var(--dsw-alias-bg-layer-2,#f8fafc) r g b / 1);
+  position:relative;box-sizing:border-box;width:100%;max-width:min(900px,calc(100% - 24px));max-height:calc(100vh - 40px);margin:18px auto 26px;padding:26px 24px 20px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--dtr-line) transparent;container-type:inline-size;
+  color:var(--dtr-text);font-size:13px;line-height:1.5;text-align:left;
+  font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif);
+  background:
+    radial-gradient(110% 60% at 4% -14%,color-mix(in srgb,var(--dtr-accent) 11%,transparent),transparent 62%),
+    radial-gradient(82% 48% at 102% -10%,color-mix(in srgb,var(--dtr-ok) 9%,transparent),transparent 64%),
+    var(--dtr-paper);
+  border:1px solid var(--dtr-line);border-radius:18px;
+  box-shadow:0 24px 48px -40px rgba(15,23,42,.5),0 1px 2px rgba(15,23,42,.04);
+}
+.dtr-panel *{box-sizing:border-box}
+/* 面板自己有滚动条：宿主的主区列是 overflow:hidden，页面不会被撑出滚动，
+   内容一高（旧版塞着任务清单时尤其明显）底部就直接被裁掉，滚也没法滚。 */
+.dtr-panel::-webkit-scrollbar{width:10px}
+.dtr-panel::-webkit-scrollbar-track{background:transparent}
+.dtr-panel::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--dtr-text3) 30%,transparent);border:3px solid transparent;background-clip:content-box;border-radius:999px}
+.dtr-panel::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--dtr-text3) 50%,transparent);border:2px solid transparent;background-clip:content-box}
+
+/* ── 页头 ── */
+.dtr-hero{display:flex;align-items:flex-start;gap:13px;flex-wrap:wrap;margin-bottom:18px}
+.dtr-hero-badge{display:block;flex:none;width:42px;height:42px;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.55);box-shadow:0 8px 18px -10px rgba(15,23,42,.55)}
+.dtr-hero-badge img{display:block;width:100%;height:100%;object-fit:cover}
+.dtr-hero-text{flex:1;min-width:220px;padding-top:1px}
+.dtr-hero-text h2{margin:0;font-size:22px;line-height:1.2;font-weight:700;letter-spacing:.2px}
+.dtr-hero-actions{display:flex;align-items:center;gap:8px;flex:none;padding-top:4px}
+.dtr-live{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 9px;border-radius:999px;border:1px solid color-mix(in srgb,var(--dtr-ok) 26%,transparent);background:color-mix(in srgb,var(--dtr-ok) 9%,transparent);font-size:10.5px;font-weight:600;letter-spacing:.3px;color:color-mix(in srgb,var(--dtr-ok) 72%,var(--dtr-text))}
+.dtr-live i{width:6px;height:6px;flex:none;border-radius:999px;background:var(--dtr-ok);box-shadow:0 0 0 0 color-mix(in srgb,var(--dtr-ok) 45%,transparent);animation:dtr-live 2.2s ease-out infinite}
+@keyframes dtr-live{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--dtr-ok) 40%,transparent)}70%,100%{box-shadow:0 0 0 6px color-mix(in srgb,var(--dtr-ok) 0%,transparent)}}
+.dtr-panel .dtr-panel-sub{margin:5px 0 0;font-size:12.5px;color:var(--dtr-text2)}
+.dtr-panel-refresh{display:inline-flex;align-items:center;gap:5px;height:28px;flex:none;padding:0 11px;border:1px solid var(--dtr-line);border-radius:9px;background:var(--dtr-card);color:var(--dtr-text2);font:inherit;font-size:11.5px;cursor:pointer;transition:border-color .15s,color .15s,background .15s,transform .15s}
+.dtr-panel-refresh:hover{border-color:color-mix(in srgb,var(--dtr-accent) 45%,var(--dtr-line));color:var(--dtr-text);background:color-mix(in srgb,var(--dtr-accent) 6%,var(--dtr-card))}
+.dtr-panel-refresh:active{transform:translateY(1px)}
+.dtr-panel-refresh:focus-visible{outline:2px solid var(--dtr-accent);outline-offset:2px}
+.dtr-panel-refresh[data-spin="true"] svg{animation:dtr-spin .6s linear}
+/* 关闭：跟刷新同高，但只放一个叉；hover 才把边界变实，别跟"实时"抢注意力。 */
+.dtr-panel-close{display:inline-grid;place-items:center;width:28px;height:28px;flex:none;padding:0;border:1px solid var(--dtr-line);border-radius:9px;background:var(--dtr-card);color:var(--dtr-text3);font:inherit;cursor:pointer;transition:border-color .15s,color .15s,background .15s}
+.dtr-panel-close:hover{border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary,#b2546a) 38%,var(--dtr-line));background:color-mix(in srgb,var(--dsw-alias-state-error-primary,#b2546a) 7%,var(--dtr-card));color:color-mix(in srgb,var(--dsw-alias-state-error-primary,#b2546a) 72%,var(--dtr-text))}
+.dtr-panel-close:focus-visible{outline:2px solid var(--dtr-accent);outline-offset:2px}
+@keyframes dtr-spin{to{transform:rotate(360deg)}}
+
+/* ── 总览：四格状态 ── */
+.dtr-overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-bottom:11px}
+.dtr-overview-cell{--tone:var(--dtr-accent);position:relative;display:flex;flex-direction:column;gap:1px;padding:12px 13px 11px;border:1px solid var(--dtr-line);border-radius:13px;overflow:hidden;transition:transform .15s,box-shadow .15s,border-color .15s;
+  background:linear-gradient(168deg,var(--dtr-card),color-mix(in srgb,var(--tone) 6%,var(--dtr-card)))}
+.dtr-overview-cell::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,var(--tone),color-mix(in srgb,var(--tone) 0%,transparent))}
+.dtr-overview-cell[data-k=waiting]{--tone:var(--dtr-warm)}
+.dtr-overview-cell[data-k=running]{--tone:var(--dtr-accent)}
+.dtr-overview-cell[data-k=done]{--tone:var(--dtr-ok)}
+.dtr-overview-cell[data-k=idle]{--tone:var(--dtr-idle)}
+.dtr-overview-cell:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--tone) 34%,var(--dtr-line));box-shadow:0 10px 20px -16px color-mix(in srgb,var(--tone) 70%,transparent)}
+.dtr-overview-cell b{font-size:26px;line-height:1.1;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:var(--dtr-text)}
+.dtr-overview-cell[data-k=waiting] b{color:color-mix(in srgb,var(--dtr-warm) 80%,var(--dtr-text))}
+.dtr-overview-cell[data-k=running] b{color:color-mix(in srgb,var(--dtr-accent) 78%,var(--dtr-text))}
+.dtr-overview-cell[data-k=done] b{color:color-mix(in srgb,var(--dtr-ok) 78%,var(--dtr-text))}
+.dtr-overview-cell[data-k=idle] b{color:var(--dtr-text3)}
+.dtr-overview-label{font-size:11.5px;font-weight:600;color:var(--dtr-text2)}
+.dtr-overview-note{font-size:10.5px;color:var(--dtr-text3)}
+.dtr-overview-ico{position:absolute;right:11px;top:11px;display:grid;place-items:center;width:26px;height:26px;border-radius:8px;color:color-mix(in srgb,var(--tone) 82%,var(--dtr-text));background:color-mix(in srgb,var(--tone) 13%,transparent)}
+
+/* ── Token 合计：一条轻量横杠，跟流水区分开 ── */
+.dtr-panel-spend{display:flex;align-items:center;gap:9px;margin:0 0 10px;padding:9px 13px;border:1px solid var(--dtr-line);border-radius:12px;font-size:11.5px;color:var(--dtr-text2);font-variant-numeric:tabular-nums;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--dtr-accent) 7%,var(--dtr-card)),var(--dtr-card))}
+.dtr-spend-ico{display:grid;place-items:center;flex:none;width:24px;height:24px;border-radius:7px;color:var(--dtr-accent);background:color-mix(in srgb,var(--dtr-accent) 12%,transparent)}
+.dtr-panel-spend b{font-size:16px;font-weight:700;letter-spacing:-.01em;color:color-mix(in srgb,var(--dtr-accent) 78%,var(--dtr-text))}
+.dtr-panel-spend .dtr-panel-spend-k{font-weight:600;color:var(--dtr-text2)}
+.dtr-panel-spend .dtr-panel-spend-note{margin-left:auto;font-size:10.5px;color:var(--dtr-text3)}
+
+/* ── Token 流水：今天 / 本周 / 本月 + 最近 7 天 ── */
+.dtr-ledger{margin:0 0 14px;padding:13px 15px 14px;border:1px solid var(--dtr-line);border-radius:14px;background:var(--dtr-card);box-shadow:0 1px 2px rgba(15,23,42,.03)}
+.dtr-ledger-head{display:flex;align-items:flex-end;gap:9px;margin-bottom:11px;flex-wrap:wrap}
+.dtr-ledger-title{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:700;color:var(--dtr-text)}
+.dtr-ledger-title svg{color:var(--dtr-accent)}
+.dtr-ledger-since{font-size:10.5px;color:var(--dtr-text3);padding-bottom:1px}
+.dtr-ledger-bars{margin-left:auto;display:flex;align-items:flex-end;gap:5px;height:36px}
+.dtr-bar{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;height:100%;width:12px}
+.dtr-bar i{display:block;width:7px;border-radius:3px 3px 1px 1px;background:color-mix(in srgb,var(--dtr-accent) 38%,transparent);min-height:3px;transition:height .3s ease}
+.dtr-bar[data-today=true] i{background:linear-gradient(180deg,color-mix(in srgb,var(--dtr-accent) 88%,#fff),var(--dtr-accent))}
+.dtr-bar em{font-style:normal;font-size:9px;line-height:1;color:var(--dtr-text3)}
+.dtr-bar[data-today=true] em{color:color-mix(in srgb,var(--dtr-accent) 78%,var(--dtr-text))}
+.dtr-ledger[data-empty="true"] .dtr-bar i{background:var(--dtr-hair)}
+.dtr-ledger-cells{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.dtr-ledger-cell{display:flex;flex-direction:column;gap:1px;padding:8px 11px 9px;border-radius:10px;background:var(--dtr-soft);border:1px solid var(--dtr-hair)}
+.dtr-ledger-cell[data-k=today]{background:color-mix(in srgb,var(--dtr-accent) 7%,var(--dtr-soft));border-color:color-mix(in srgb,var(--dtr-accent) 20%,var(--dtr-hair))}
+.dtr-ledger-k{font-size:10.5px;letter-spacing:.3px;color:var(--dtr-text2)}
+.dtr-ledger-cell b{font-size:17px;line-height:1.2;font-weight:700;color:var(--dtr-text);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.dtr-ledger-cell[data-k=today] b{color:color-mix(in srgb,var(--dtr-accent) 76%,var(--dtr-text))}
+.dtr-ledger-note{font-size:10px;color:var(--dtr-text3)}
+
+/* ── 换肤 / 壁纸 ── */
+.dtr-skin{margin:0 0 14px;padding:15px 16px 16px;border:1px solid var(--dtr-line);border-radius:16px;background:var(--dtr-card);box-shadow:0 1px 2px rgba(15,23,42,.03)}
+.dtr-skin-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dtr-skin-title{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:700;color:var(--dtr-text)}
+.dtr-skin-title svg{color:var(--dtr-accent)}
+.dtr-skin-now{margin-left:auto;padding:2px 9px;border-radius:999px;font-size:10.5px;font-weight:600;color:color-mix(in srgb,var(--dtr-accent) 78%,var(--dtr-text));background:color-mix(in srgb,var(--dtr-accent) 10%,transparent)}
+.dtr-skin-sub{margin:4px 0 12px;font-size:11.5px;line-height:1.6;color:var(--dtr-text3)}
+.dtr-subhead{display:flex;align-items:baseline;gap:8px;margin:0 0 8px}
+.dtr-subhead b{font-size:10.5px;font-weight:700;letter-spacing:.8px;color:var(--dtr-text3)}
+.dtr-subhead span{font-size:10.5px;color:var(--dtr-text3)}
+.dtr-skin-block + .dtr-skin-block{margin-top:14px;padding-top:13px;border-top:1px solid var(--dtr-hair)}
+.dtr-skin-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px}
+.dtr-skin-card{display:flex;flex-direction:column;gap:5px;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.dtr-skin-face{position:relative;display:block;height:42px;border:1px solid var(--dtr-hair);border-radius:9px;overflow:hidden;transition:border-color .15s,box-shadow .15s,transform .15s}
+.dtr-skin-face i{position:absolute;display:block;border-radius:999px;border:1px solid rgba(255,255,255,.45)}
+.dtr-skin-card:hover .dtr-skin-face{transform:translateY(-1px);box-shadow:0 8px 14px -10px rgba(15,23,42,.65)}
+.dtr-skin-card:focus-visible{outline:none}
+.dtr-skin-card:focus-visible .dtr-skin-face{outline:2px solid var(--dtr-accent);outline-offset:2px}
+.dtr-skin-card[data-active=true] .dtr-skin-face{border-color:transparent;box-shadow:0 0 0 2px var(--dtr-accent),0 8px 14px -10px color-mix(in srgb,var(--dtr-accent) 60%,transparent)}
+.dtr-skin-name{display:block;font-size:10.5px;line-height:1.3;color:var(--dtr-text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dtr-skin-card[data-active=true] .dtr-skin-name{color:var(--dtr-text);font-weight:600}
+/* 自定义那张：虚线 + 一个加号，跟"预设"分开；占两格，别让它在最后一行落单 */
+.dtr-skin-card[data-custom=true]{grid-column:span 2}
+.dtr-skin-card[data-custom=true] .dtr-skin-face{display:grid;place-items:center;border-style:dashed;border-color:color-mix(in srgb,var(--dtr-accent) 34%,var(--dtr-hair))}
+.dtr-skin-card[data-custom=true] .dtr-skin-plus{position:static;display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:rgba(255,255,255,.16);color:#fff;font-size:13px;line-height:1;border:1px solid rgba(255,255,255,.5)}
+/* 选中角标：一张小圆片，压在缩略图右上角 */
+.dtr-skin-tick{position:absolute;right:4px;top:4px;display:grid;place-items:center;width:15px;height:15px;border-radius:999px;background:var(--dtr-accent);color:#fff;font-size:9.5px;font-weight:700;line-height:1;box-shadow:0 1px 3px rgba(15,23,42,.35)}
+/* 壁纸：缩略图网格 */
+.dtr-wallgroup{margin-top:9px}
+.dtr-wallgroup-label{display:block;margin-bottom:5px;font-size:9.5px;letter-spacing:.6px;color:var(--dtr-text3)}
+.dtr-wallgrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.dtr-wall{display:flex;flex-direction:column;gap:4px;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.dtr-wall-thumb{position:relative;display:block;width:100%;aspect-ratio:16/9;border:1px solid var(--dtr-hair);border-radius:8px;overflow:hidden;background:var(--dtr-soft);background-size:cover;background-position:center;transition:border-color .15s,box-shadow .15s,transform .15s}
+.dtr-wall-thumb img{display:block;width:100%;height:100%;object-fit:cover}
+.dtr-wall:hover .dtr-wall-thumb{transform:translateY(-1px);box-shadow:0 8px 14px -10px rgba(15,23,42,.65)}
+.dtr-wall:focus-visible{outline:none}
+.dtr-wall:focus-visible .dtr-wall-thumb{outline:2px solid var(--dtr-accent);outline-offset:2px}
+.dtr-wall[data-active=true] .dtr-wall-thumb{border-color:transparent;box-shadow:0 0 0 2px var(--dtr-accent)}
+.dtr-wall-name{display:block;font-size:10px;line-height:1.3;color:var(--dtr-text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dtr-wall[data-active=true] .dtr-wall-name{color:var(--dtr-text);font-weight:600}
+/* 老版本主题插件没有缩略图时退回的药丸（有图时这一段不出现） */
+.dtr-skin-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.dtr-skin-chip{padding:4px 9px;border:1px solid var(--dtr-hair);border-radius:999px;background:var(--dtr-soft);color:var(--dtr-text2);font:inherit;font-size:10.5px;cursor:pointer}
+.dtr-skin-chip:hover{border-color:color-mix(in srgb,var(--dtr-accent) 40%,var(--dtr-hair))}
+.dtr-skin-chip[data-active=true]{border-color:var(--dtr-accent);color:var(--dtr-text);font-weight:600}
+/* 自定义配色的取色器：只在 custom 皮肤下出现，就地展开 */
+.dtr-colorgrid{margin-top:11px;padding:11px 13px 12px;border:1px dashed color-mix(in srgb,var(--dtr-accent) 32%,var(--dtr-hair));border-radius:12px;background:color-mix(in srgb,var(--dtr-accent) 4%,var(--dtr-soft))}
+.dtr-colorgrid-head{display:flex;align-items:baseline;gap:8px;margin-bottom:9px}
+.dtr-colorgrid-head b{font-size:10.5px;font-weight:700;letter-spacing:.6px;color:var(--dtr-text2)}
+.dtr-colorgrid-head span{font-size:10px;color:var(--dtr-text3)}
+.dtr-colorgrid-cells{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 10px}
+.dtr-color{display:flex;align-items:center;gap:7px;min-width:0;font-size:10.5px;color:var(--dtr-text2)}
+.dtr-color span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dtr-color input[type=color]{width:30px;height:22px;flex:none;padding:0;border:1px solid var(--dtr-line);border-radius:6px;background:transparent;cursor:pointer}
+.dtr-color input[type=color]::-webkit-color-swatch-wrapper{padding:2px}
+.dtr-color input[type=color]::-webkit-color-swatch{border:0;border-radius:4px}
+.dtr-color input[type=color]:focus-visible{outline:2px solid var(--dtr-accent);outline-offset:2px}
+
+/* ── 任务分组 ── */
+.dtr-section{margin-top:15px}
+.dtr-section-head{display:flex;align-items:center;gap:7px;margin:0 2px 7px}
+.dtr-section-head h3{margin:0;font-size:12.5px;font-weight:700;letter-spacing:.2px;color:var(--dtr-text)}
+.dtr-section-count{padding:0 7px;border-radius:999px;font-size:10px;font-weight:700;line-height:17px;color:var(--dtr-text2);background:var(--dtr-soft);border:1px solid var(--dtr-hair)}
+.dtr-section-head .dtr-dot{width:6px;height:6px}
+.dtr-rows{border:1px solid var(--dtr-line);border-radius:13px;background:var(--dtr-card);overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.03)}
+.dtr-panel-row{display:flex;align-items:center;gap:9px;width:100%;padding:10px 13px;border:0;background:transparent;text-align:left;font:inherit;color:inherit;cursor:pointer;transition:background .12s ease}
+.dtr-panel-row + .dtr-panel-row{border-top:1px solid var(--dtr-hair)}
+.dtr-panel-row:hover{background:color-mix(in srgb,var(--dtr-accent) 5%,var(--dtr-card))}
+.dtr-panel-row:focus-visible{outline:2px solid var(--dtr-accent);outline-offset:-2px}
+.dtr-rowmark{display:grid;place-items:center;flex:none;width:19px;height:19px;border-radius:6px;color:var(--dtr-text3);background:var(--dtr-soft)}
+.dtr-rowmark[data-k=waiting]{color:color-mix(in srgb,var(--dtr-warm) 82%,var(--dtr-text));background:color-mix(in srgb,var(--dtr-warm) 13%,transparent)}
+.dtr-rowmark[data-k=running]{color:var(--dtr-accent);background:color-mix(in srgb,var(--dtr-accent) 12%,transparent)}
+.dtr-rowmark[data-k=done]{color:color-mix(in srgb,var(--dtr-ok) 78%,var(--dtr-text));background:color-mix(in srgb,var(--dtr-ok) 12%,transparent)}
+.dtr-rowmark[data-k=idle]{color:var(--dtr-text3)}
+.dtr-rowmark i{display:block;width:6px;height:6px;border-radius:999px;background:currentColor}
+.dtr-rowmark[data-k=running] i{animation:dtr-pulse 1.8s ease-in-out infinite}
+.dtr-panel-row .dtr-panel-title{flex:1;min-width:0;font-size:13px;font-weight:500;color:var(--dtr-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dtr-panel-row[data-k=done] .dtr-panel-title{color:var(--dtr-text2);font-weight:450}
+.dtr-panel-row .dtr-panel-tag{flex:none;max-width:104px;padding:0 6px;border-radius:5px;font-size:10px;line-height:17px;color:var(--dtr-text3);background:var(--dtr-soft);border:1px solid var(--dtr-hair);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dtr-panel-row .dtr-panel-todo{flex:none;font-size:10px;line-height:17px;padding:0 6px;border-radius:5px;color:var(--dtr-text2);background:var(--dtr-soft)}
+.dtr-panel-row .dtr-panel-tok{flex:none;min-width:56px;text-align:right;font-size:10.5px;font-variant-numeric:tabular-nums;color:color-mix(in srgb,var(--dtr-accent) 74%,var(--dtr-text))}
+.dtr-panel-row .dtr-panel-meta{flex:none;min-width:74px;text-align:right;font-size:10.5px;color:var(--dtr-text3);font-variant-numeric:tabular-nums}
+.dtr-panel-row:hover .dtr-panel-meta{color:var(--dtr-text2)}
+
+/* ── 空态 / 提示 / 页脚 ── */
+.dtr-panel-empty{display:flex;flex-direction:column;align-items:center;gap:4px;padding:26px 20px;border:1px dashed var(--dtr-line);border-radius:13px;background:var(--dtr-soft);text-align:center;color:var(--dtr-text3);font-size:11.5px;line-height:1.6}
+.dtr-panel-empty svg{color:var(--dtr-text3);margin-bottom:2px}
+.dtr-panel-empty b{font-size:12.5px;font-weight:600;color:var(--dtr-text2)}
+.dtr-panel-hint{margin-top:8px;font-size:10.5px;color:var(--dtr-text3)}
+.dtr-panel-foot{display:flex;align-items:flex-start;gap:7px;margin-top:15px;padding:9px 12px;border-radius:10px;background:var(--dtr-soft);font-size:10.5px;line-height:1.6;color:var(--dtr-text3)}
+.dtr-panel-foot svg{flex:none;margin-top:1px}
+
+@container (max-width:680px){
+  .dtr-overview{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dtr-skin-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .dtr-wallgrid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .dtr-colorgrid-cells{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dtr-ledger-cells{grid-template-columns:1fr}
+  .dtr-panel-row .dtr-panel-meta{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .dtr-live i,.dtr-rowmark i,.dtr-panel-refresh[data-spin=true] svg{animation:none}
+  .dtr-overview-cell,.dtr-skin-face,.dtr-wall-thumb,.dtr-bar i,.dtr-panel-refresh{transition:none}
+  .dtr-overview-cell:hover,.dtr-skin-card:hover .dtr-skin-face,.dtr-wall:hover .dtr-wall-thumb{transform:none}
+}
+
 /* ── 视觉语言：同色系柔光面板、细环、发丝级树线、右对齐数字列 ──────────────────
    借鉴的是"组织方式"而不是别人的图：面板自成一块柔光纸，层级用真实连线表达
    （不是 ├─ 字符），Token 和时间永远右对齐成一列，眼睛顺着列往下扫。
@@ -810,77 +1022,7 @@ const PANEL_LABEL = "工作小管家";
 .dtr-pill[data-deco="true"]{padding-right:36px}
 .dtr-pill[data-theme="sakura"]{background:linear-gradient(150deg,#fff8fb,#ffeaf2);border-color:rgba(219,39,119,.22)}
 .dtr-deco[data-slot="pill"]{top:50%;right:3px;width:26px;transform:translateY(-50%) rotate(-8deg)}
-.dtr-panel *{box-sizing:border-box}
-.dtr-panel h2{margin:0 0 4px;font-size:20px}
-.dtr-panel .dtr-panel-sub{color:var(--dsw-alias-label-tertiary,#8a9099);margin-bottom:16px;font-size:12px}
-.dtr-panel-head{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap}
-.dtr-panel-head>div{flex:1;min-width:220px}
-.dtr-panel-refresh{display:inline-flex;align-items:center;gap:5px;flex:none;padding:5px 10px;border:1px solid var(--dsw-alias-border-l2,rgba(15,23,42,.12));border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary,#4b5563);font:inherit;font-size:12px;cursor:pointer}
-.dtr-panel-refresh:hover{background:var(--dsw-alias-bg-layer-3,rgba(15,23,42,.05));color:var(--dsw-alias-label-primary,#1f2328)}
-.dtr-panel-refresh[data-spin="true"] svg{animation:dtr-spin .6s linear}
-.dtr-overview{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:18px}
-.dtr-overview-cell{display:flex;flex-direction:column;gap:1px;padding:10px 12px;border:1px solid var(--dsw-alias-border-l2,rgba(15,23,42,.1));border-radius:11px;background:var(--dsw-alias-bg-layer-2,rgba(248,250,252,.7))}
-.dtr-overview-cell b{font-size:24px;line-height:1.15;font-variant-numeric:tabular-nums}
-.dtr-overview-cell .dtr-overview-label{font-size:12px;color:var(--dsw-alias-label-secondary,#4b5563)}
-.dtr-overview-cell .dtr-overview-note{font-size:11px;color:var(--dsw-alias-label-tertiary,#8a9099)}
-.dtr-overview-cell[data-k=waiting] b{color:var(--dsw-alias-state-warn-primary,#c2410c)}
-.dtr-overview-cell[data-k=running] b{color:color-mix(in srgb,var(--dsw-alias-state-business-primary,#2f6df6) 78%,var(--dsw-alias-label-primary,#1f2328))}
-.dtr-overview-cell[data-k=done] b{color:var(--dsw-alias-state-success-primary,#15803d)}
-.dtr-overview-cell[data-k=idle] b{color:var(--dsw-alias-label-tertiary,#8a9099)}
-@keyframes dtr-spin{to{transform:rotate(360deg)}}
-/* Token 合计：一行，跟总览带分开——"几个任务"和"烧了多少"是两件事。 */
-.dtr-panel-spend{display:flex;align-items:baseline;gap:8px;margin:-4px 0 18px;padding:8px 12px;border:1px dashed var(--dsw-alias-border-l2,rgba(15,23,42,.14));border-radius:10px;font-size:12px;color:var(--dsw-alias-label-tertiary,#8a9099);font-variant-numeric:tabular-nums}
-.dtr-panel-spend b{font-size:14px;color:color-mix(in srgb,var(--dsw-alias-state-business-primary,#2f6df6) 78%,var(--dsw-alias-label-primary,#1f2328))}
-.dtr-panel-spend .dtr-panel-spend-k{color:var(--dsw-alias-label-secondary,#4b5563)}
-.dtr-panel-spend .dtr-panel-spend-note{margin-left:auto;font-size:11px}
-.dtr-panel-badges{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
-/* Token 流水：今天 / 本周 / 本月 + 最近 7 天的小柱图。
-   柱图用排版高度做，不引图表库 —— 七根柱子不值得多一个依赖。 */
-.dtr-ledger{margin:-6px 0 18px;padding:10px 12px;border:1px solid var(--dsw-alias-border-l2,rgba(15,23,42,.1));border-radius:12px;background:rgb(from var(--dsw-alias-bg-layer-2,#f8fafc) r g b / 1)}
-.dtr-ledger-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.dtr-ledger-title{font-size:12px;font-weight:600;color:var(--dsw-alias-label-primary,#1f2328)}
-.dtr-ledger-since{font-size:11px;color:var(--dsw-alias-label-secondary,#4b5563)}
-.dtr-ledger-bars{margin-left:auto;display:flex;align-items:flex-end;gap:2px;height:18px}
-.dtr-ledger-bars i{display:block;width:5px;border-radius:2px 2px 0 0;background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#2f6df6) 62%,transparent)}
-.dtr-ledger-bars i:last-child{background:var(--dsw-alias-state-business-primary,#2f6df6)}
-.dtr-ledger-cells{display:flex;gap:6px}
-.dtr-ledger-cell{flex:1 1 0;display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-radius:9px;background:rgb(from var(--dsw-alias-bg-layer-1,#fff) r g b / 1);border:1px solid var(--dsw-alias-border-l3,rgba(15,23,42,.06))}
-.dtr-ledger-k{font-size:10.5px;letter-spacing:.3px;color:var(--dsw-alias-label-secondary,#4b5563)}
-.dtr-ledger-cell b{font-size:15px;line-height:1.15;color:var(--dsw-alias-label-primary,#1f2328);font-variant-numeric:tabular-nums}
-.dtr-ledger-note{font-size:10px;color:var(--dsw-alias-label-secondary,#4b5563)}
-.dtr-ledger[data-empty="true"] .dtr-ledger-bars i{background:var(--dsw-alias-border-l2,rgba(15,23,42,.14))}
-.dtr-panel-badge{border:1px solid var(--dsw-alias-border-l2,rgba(15,23,42,.1));border-radius:999px;padding:4px 11px;font-size:12px;color:var(--dsw-alias-label-secondary,#4b5563)}
-.dtr-panel-badge b{color:var(--dsw-alias-label-primary,#1f2328);font-size:13px}
-.dtr-panel-group{margin-bottom:16px}
-.dtr-panel-group>h3{margin:0 0 6px;font-size:13px;font-weight:600;color:var(--dsw-alias-label-secondary,#4b5563)}
-.dtr-panel-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border:1px solid transparent;border-radius:9px;background:transparent;color:inherit;font:inherit;cursor:pointer}
-.dtr-panel-row:hover{background:var(--dsw-alias-bg-layer-3,rgba(15,23,42,.05));border-color:var(--dsw-alias-border-l2,rgba(15,23,42,.1))}
-.dtr-panel-row .dtr-panel-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dtr-panel-row .dtr-panel-tag{font-size:11px;color:var(--dsw-alias-label-tertiary,#8a9099);border:1px solid var(--dsw-alias-border-l3,rgba(15,23,42,.08));border-radius:6px;padding:1px 6px;flex:none}
-.dtr-panel-row .dtr-panel-meta{font-size:11px;color:var(--dsw-alias-label-tertiary,#8a9099);flex:none}
-/* 每个任务自己那一格 Token：等宽数字，右对齐才好上下对比。 */
-.dtr-panel-row .dtr-panel-tok{flex:none;font-size:11px;font-variant-numeric:tabular-nums;color:color-mix(in srgb,var(--dsw-alias-state-business-primary,#2f6df6) 78%,var(--dsw-alias-label-primary,#1f2328));min-width:58px;text-align:right}
-.dtr-panel-empty{padding:18px;border:1px dashed var(--dsw-alias-border-l2,rgba(15,23,42,.15));border-radius:11px;color:var(--dsw-alias-label-tertiary,#8a9099);font-size:12px}
-.dtr-panel-foot{margin-top:14px;font-size:12px;color:var(--dsw-alias-label-tertiary,#8a9099)}
-.dtr-panel-hint{margin-top:6px;font-size:12px;color:var(--dsw-alias-label-tertiary,#8a9099)}
-/* ── 面板上的换肤区 ── */
-.dtr-skin{margin:0 0 18px;padding:14px;border:1px solid var(--dsw-alias-border-l2,rgba(15,23,42,.1));border-radius:12px;background:var(--dsw-alias-bg-layer-2,rgba(248,250,252,.7))}
-.dtr-skin-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:4px}
-.dtr-skin-head b{font-size:13px}
-.dtr-skin-head .dtr-skin-now{font-size:12px;color:var(--dsw-alias-label-tertiary,#8a9099)}
-.dtr-skin-sub{margin:0 0 10px;font-size:12px;color:var(--dsw-alias-label-tertiary,#8a9099)}
-.dtr-skin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
-.dtr-skin-card{display:flex;flex-direction:column;gap:6px;padding:0;border:1px solid transparent;border-radius:10px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
-.dtr-skin-card:hover .dtr-skin-face{border-color:var(--dsw-alias-border-l4,rgba(15,23,42,.3));transform:translateY(-1px)}
-.dtr-skin-card[data-active=true] .dtr-skin-face{border-color:var(--dsw-alias-state-business-primary,#4d6bfe);box-shadow:0 0 0 1px var(--dsw-alias-state-business-primary,#4d6bfe) inset}
-.dtr-skin-face{position:relative;display:block;height:46px;border:1px solid var(--dsw-alias-border-l3,rgba(15,23,42,.1));border-radius:9px;overflow:hidden;transition:border-color .15s,transform .15s}
-.dtr-skin-face i{position:absolute;display:block;border-radius:50%}
-.dtr-skin-name{display:block;font-size:11.5px;color:var(--dsw-alias-label-secondary,#4b5563);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dtr-skin-card[data-active=true] .dtr-skin-name{color:var(--dsw-alias-label-primary,#1f2328);font-weight:600}
-.dtr-skin-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
-.dtr-skin-chip{padding:4px 9px;border:1px solid var(--dsw-alias-border-l3,rgba(15,23,42,.1));border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary,#4b5563);font:inherit;font-size:11.5px;cursor:pointer}
-.dtr-skin-chip:hover{border-color:var(--dsw-alias-border-l4,rgba(15,23,42,.3))}
-.dtr-skin-chip[data-active=true]{border-color:var(--dsw-alias-state-business-primary,#4d6bfe);color:var(--dsw-alias-label-primary,#1f2328)}
+
 `;
 
     // ── 纯逻辑（可单测，见 verify/radar-unit.mjs）─────────────────────────────
@@ -2093,6 +2235,20 @@ ow` 由调用方传入），
       // 静音：铃铛轮廓 + 一道斜杠。13px 下画完整的铃铛只剩个疙瘩，加斜杠才认得出"关掉"。
       snooze: ["M4 9.2V6.3a2.8 2.8 0 0 1 5.6 0v2.9l.9 1.1H3.1z", "M5.7 11.6a1.1 1.1 0 0 0 2.1 0", "M2.6 2.7 10.9 11"],
       check: ["M3.2 7.1 5.7 9.6 10.3 4.3"],
+      // 关面板：一个叉。两条线在 13px 下比"圆圈里一个叉"清楚，也不会跟刷新撞脸。
+      close: ["M3.6 3.6 9.9 9.9", "M9.9 3.6 3.6 9.9"],
+      // 总览四格与面板小节：时钟 / 脉搏 / 月亮 / 调色盘 / 柱图 / 记账 / 提示。
+      // 都按 13.5 的格子画，再小也不加细节 —— 加一根线就糊成墨点。
+      clock: ["M6.75 2.15a4.6 4.6 0 1 0 0 9.2a4.6 4.6 0 0 0 0-9.2", "M6.75 4.3v2.65l1.75 1.05"],
+      pulse: ["M2.1 6.75h2l1.6-3.3 2.1 6.6 1.6-3.3h2"],
+      moon: ["M9.05 9.05a3.7 3.7 0 0 1-5.45-4.65 4.55 4.55 0 1 0 5.45 4.65z"],
+      palette: [
+        "M6.75 1.9a4.85 4.85 0 1 0 0 9.7c.9 0 1.1-.6.8-1.2-.3-.7 0-1.4.9-1.4h1.2c1 0 1.6-.7 1.6-1.8A4.9 4.9 0 0 0 6.75 1.9z",
+        "M4.5 5.2h.01", "M6.9 4.1h.01", "M4.3 7.6h.01",
+      ],
+      chart: ["M2.4 10.4V7.2", "M5.4 10.4V4.4", "M8.4 10.4V6.2", "M11.2 10.4V2.8"],
+      coin: ["M6.75 2.2v9.1", "M4.2 4.1h3.6a1.8 1.8 0 0 1 0 3.6H4.7a1.8 1.8 0 0 0 0 3.6h3.5"],
+      info: ["M6.75 2.4a4.35 4.35 0 1 0 0 8.7a4.35 4.35 0 0 0 0-8.7", "M6.75 4.3h.01", "M6.75 6.1v3.1"],
       };
       const list = paths[name] ?? paths.minus;
       return h(
@@ -2607,57 +2763,111 @@ ow` 由调用方传入），
     }
 
     /**
-     * 换肤区：**这是整个界面的开关，不只是小窗的**。
+     * 外观区：**这是整个界面的开关，不只是小窗的**。
+     *
+     * 2026-11-07 重排：原来只有一行"换肤"+一排色卡，下面那排壁纸没有任何标题，
+     * 用户会把"自定义色表盘"当成这一排的标题、把壁纸当成皮肤。现在分成两段：
+     * 「界面配色」和「背景壁纸」，各带一句人话说明；壁纸直接给缩略图。
      *
      * 点一张卡 = 派发 `dsh-skin:apply`，宿主聊天区、侧栏、输入框和小窗一起变色。
      * 小窗自己还有一套独立外观（⚙ → 外观），那套只在"不跟随宿主"时才会盖掉全局皮肤，
      * 这一点在下面那行小字里直接写出来 —— 否则用户点了全局皮肤发现小窗没变会以为坏了。
      * @param {{ snapshot: object | null }} props 属性。
-     * @returns {React.ReactElement} 换肤区。
+     * @returns {React.ReactElement} 外观区。
      */
     function SkinPicker({ snapshot }) {
       if (!snapshot) {
         return h(
-          "div",
+          "section",
           { className: "dtr-skin" },
-          h("div", { className: "dtr-skin-head" }, h("b", null, "换肤")),
-          h("div", { className: "dtr-skin-sub" },
+          h("div", { className: "dtr-skin-head" },
+            h("span", { className: "dtr-skin-title" }, h(Icon, { name: "palette", size: 13 }), "外观")),
+          h("p", { className: "dtr-skin-sub" },
             "没检测到「主题与外观」插件，所以这里换不了整个界面。装上 dsh-plugin-skin 后刷新页面即可；小窗自己的外观不受影响，仍在右上 ⚙ 里调。"),
         );
       }
 
-      const cards = snapshot.skins.map((skin) =>
-        h(
+      const cards = snapshot.skins.map((skin) => {
+        // 「自定义配色」得跟 12 套预设长得不一样：虚线 + 加号，占两格。
+        const isCustom = skin.id === "custom";
+        const active = snapshot.skin === skin.id;
+        return h(
           "button",
           {
             key: skin.id,
             type: "button",
             className: "dtr-skin-card",
-            "data-active": snapshot.skin === skin.id ? "true" : "false",
-            title: skin.note ? `${skin.label} — ${skin.note}` : skin.label,
+            "data-active": active ? "true" : "false",
+            "data-custom": isCustom ? "true" : "false",
+            title: isCustom
+              ? "自定义配色 — 点一下，下面会出现六个取色器"
+              : (skin.note ? `${skin.label} — ${skin.note}` : skin.label),
             onClick: () => requestSkinApply({ skin: skin.id }),
           },
           h(
             "span",
             { className: "dtr-skin-face", style: { background: skin.panel || skin.bg || "transparent" } },
-            skin.swatches.slice(0, 3).map((color, index) =>
-              h("i", {
-                key: color + index,
-                style: {
-                  width: index === 0 ? 20 : 12,
-                  height: index === 0 ? 20 : 12,
-                  left: 8 + index * 16,
-                  bottom: 6,
-                  background: color,
-                  border: "1px solid rgba(255,255,255,.5)",
-                },
-              })),
+            active ? h("span", { className: "dtr-skin-tick" }, "✓") : null,
+            isCustom
+              ? h("span", { className: "dtr-skin-plus" }, "＋")
+              : skin.swatches.slice(0, 3).map((color, index) =>
+                h("i", {
+                  key: color + index,
+                  style: {
+                    width: index === 0 ? 20 : 12,
+                    height: index === 0 ? 20 : 12,
+                    left: 8 + index * 16,
+                    bottom: 6,
+                    background: color,
+                  },
+                })),
           ),
-          h("span", { className: "dtr-skin-name" }, skin.label),
-        ));
+          h("span", { className: "dtr-skin-name" }, isCustom ? "自定义配色" : skin.label),
+        );
+      });
 
-      const chips = snapshot.wallpapers.map((item) =>
+      // 有缩略图画缩略图；老版本主题插件不广播 thumb/preview，就退回文字药丸。
+      const hasVisual = (item) => Boolean(item.thumb || item.preview);
+      const wallpapers = snapshot.wallpapers;
+      const illustrated = wallpapers.filter((item) => hasVisual(item) && !item.preview);
+      const textures = wallpapers.filter((item) => hasVisual(item) && item.preview);
+      const plain = wallpapers.filter((item) => !hasVisual(item));
+
+      const wallTile = (item) => h(
+        "button",
+        {
+          key: item.id,
+          type: "button",
+          className: "dtr-wall",
+          "data-active": snapshot.wallpaper === item.id ? "true" : "false",
+          title: item.note ? `${item.label} — ${item.note}` : item.label,
+          onClick: () => requestSkinApply({ wallpaper: item.id }),
+        },
         h(
+          "span",
+          {
+            className: "dtr-wall-thumb",
+            style: item.preview ? { backgroundImage: item.preview, backgroundSize: "100% 100%" } : null,
+          },
+          snapshot.wallpaper === item.id ? h("span", { className: "dtr-skin-tick" }, "✓") : null,
+          !item.preview && item.thumb
+            ? h("img", { src: item.thumb, alt: "", loading: "lazy", decoding: "async", draggable: "false" })
+            : null,
+        ),
+        h("span", { className: "dtr-wall-name" }, item.label),
+      );
+
+      const wallGroup = (label, items) => items.length === 0 ? null : h(
+        "div",
+        { className: "dtr-wallgroup", key: label },
+        h("span", { className: "dtr-wallgroup-label" }, label),
+        h("div", { className: "dtr-wallgrid" }, items.map(wallTile)),
+      );
+
+      const chips = plain.length === 0 ? null : h(
+        "div",
+        { className: "dtr-skin-chips" },
+        plain.map((item) => h(
           "button",
           {
             key: item.id,
@@ -2667,27 +2877,71 @@ ow` 由调用方传入），
             title: item.note || item.label,
             onClick: () => requestSkinApply({ wallpaper: item.id }),
           },
-          item.kind === "css" ? `◇ ${item.label}` : `▣ ${item.label}`,
-        ));
+          item.label,
+        )),
+      );
 
-      return h(
+      // 「自定义配色」的取色器：点那张虚线卡之后就地在下面展开，不再跳到「主题与外观」。
+      // 六个角色名是对方快照里的约定；颜色只认 #rrggbb，改一下整套重算。
+      // supportsCustomColors 是给对方老版本留的退路：老插件不认这个补丁，就不摆一排点了没用的取色器。
+      const colorEditor = snapshot.skin !== "custom" ? null : (snapshot.supportsCustomColors ? h(
         "div",
+        { className: "dtr-colorgrid" },
+        h("div", { className: "dtr-colorgrid-head" },
+          h("b", null, "自定义配色"),
+          h("span", null, "改的是整套界面的颜色，自动保存")),
+        h("div", { className: "dtr-colorgrid-cells" },
+          [
+            ["accent", "强调色", "#b8a5ff"],
+            ["surface", "主表面", "#2a2348"],
+            ["surface2", "次表面", "#4f3b78"],
+            ["sidebar", "侧栏色", "#312856"],
+            ["text", "主要文字", "#fbf8ff"],
+            ["code", "代码块", "#211b3a"],
+          ].map(([role, label, fallback]) => h(
+            "label",
+            { key: role, className: "dtr-color" },
+            h("span", null, label),
+            h("input", {
+              type: "color",
+              value: snapshot.customColors?.[role] || fallback,
+              "aria-label": label,
+              "data-role": role,
+              onChange: (event) => requestSkinApply({ customColors: { [role]: event.target.value } }),
+            }),
+          ))),
+      ) : h(
+        "div",
+        { className: "dtr-colorgrid" },
+        h("div", { className: "dtr-colorgrid-head" },
+          h("b", null, "自定义配色"),
+          h("span", null, "这套「主题与外观」版本较旧，取色器请到它自己的面板里调；更新插件后就能在这里改。")),
+      ));
+      return h(
+        "section",
         { className: "dtr-skin" },
-        h(
-          "div",
-          { className: "dtr-skin-head" },
-          h("b", null, "换肤"),
-          h("span", { className: "dtr-skin-now" }, snapshot.skinLabel ? `当前：${snapshot.skinLabel}` : "当前：未选择"),
-        ),
-        h("div", { className: "dtr-skin-sub" },
-          "点一下整套界面一起换：聊天区、侧栏、输入框和小窗都跟着走。想给小窗单独配色，去右上 ⚙ → 外观（那一套会盖掉全局皮肤）。"),
-        h("div", { className: "dtr-skin-grid" }, cards),
-        snapshot.wallpapers.length > 0
-          ? h("div", { className: "dtr-skin-chips" }, chips)
+        h("div", { className: "dtr-skin-head" },
+          h("span", { className: "dtr-skin-title" }, h(Icon, { name: "palette", size: 13 }), "外观"),
+          h("span", { className: "dtr-skin-now" }, `当前：${snapshot.skinLabel || "未选择"}`)),
+        h("p", { className: "dtr-skin-sub" },
+          "点一下整套界面一起换：聊天区、侧栏、输入框和小窗都跟着走。只想给小窗单独配色，去右上 ⚙ → 外观。"),
+        h("div", { className: "dtr-skin-block" },
+          h("div", { className: "dtr-subhead" },
+            h("b", null, "界面配色"),
+            h("span", null, `${snapshot.skins.length} 套 · 换的是整套界面的颜色`)),
+          h("div", { className: "dtr-skin-grid" }, cards),
+          colorEditor),
+        wallpapers.length > 0
+          ? h("div", { className: "dtr-skin-block" },
+            h("div", { className: "dtr-subhead" },
+              h("b", null, "背景壁纸"),
+              h("span", null, "只换聊天区背景，不动文字和配色")),
+            wallGroup("插画", illustrated),
+            wallGroup("纹理", textures),
+            chips)
           : null,
       );
     }
-
     // ── 主组件 ──────────────────────────────────────────────────────────────
 
     /**
@@ -2721,12 +2975,14 @@ ow` 由调用方传入），
     }
 
     /**
-     * Token 流水：今天 / 本周 / 本月 + 最近 7 天的小柱图。
+     * Token 流水：今天 / 本周 / 本月 + 最近 7 天的柱图。
      *
      * 为什么要有它：行上那个 `12M tok` 是"这个会话一共烧了多少"，只会越来越大，
      * 看久了没有尺度感。这里记的是**每天新跑出来的量** —— 这周用了多少、这个月用了多少，
      * 才是能被记住的数字。
      *
+     * 2026-11-07 改版：柱子从"面板右上角一条细线"改成带星期标签的小柱图，
+     * 今天那根用实色、其余用淡色 —— 原来的柱图没有横轴，看不出哪根是哪天。
      * 口径写在 title 里，明说"只记装上之后"，不然用户会以为它能倒算出历史。
      * @param {{ ledger: object, now: number }} props 账本与"现在"。
      * @returns {React.ReactElement} 流水区。
@@ -2735,6 +2991,8 @@ ow` 由调用方传入），
       const totals = ledgerTotals(ledger, now);
       const peak = totals.last7.reduce((max, day) => Math.max(max, day.value), 0);
       const started = totals.days > 0;
+      const todayKey = dateKey(new Date(now));
+      const weekdays = "日一二三四五六";
       const cell = (key, label, value, note) => h("div", { key, className: "dtr-ledger-cell", "data-k": key },
         h("span", { className: "dtr-ledger-k" }, label),
         h("b", null, started ? formatTokens(value) : "—"),
@@ -2747,17 +3005,24 @@ ow` 由调用方传入），
           : "还没记到量：等这个列表里任何一个会话再跑一轮，这里就开始记了。",
       },
       h("div", { className: "dtr-ledger-head" },
-        h("span", { className: "dtr-ledger-title" }, "Token 流水"),
+        h("span", { className: "dtr-ledger-title" }, h(Icon, { name: "chart", size: 13 }), "Token 流水"),
         h("span", { className: "dtr-ledger-since" },
           started ? `从 ${totals.since} 起记` : "还没开始记"),
-        h("span", { className: "dtr-ledger-bars", "aria-hidden": "true" },
-          totals.last7.map((day) => h("i", {
-            key: day.key,
-            "data-k": day.key,
-            // 空的那天也给 2% 的高度，否则柱图会缺格，看着像坏了。
-            style: { height: Math.max(2, Math.round((day.value / (peak || 1)) * 100)) + "%" },
-            title: `${day.key} ${formatTokens(day.value)} tok`,
-          })))),
+        started ? h("span", { className: "dtr-ledger-bars", "aria-hidden": "true" },
+          totals.last7.map((day) => {
+            const date = new Date(day.key + "T00:00:00");
+            return h("span", {
+              key: day.key,
+              className: "dtr-bar",
+              "data-today": day.key === todayKey ? "true" : "false",
+            },
+            h("i", {
+              // 空的那天也给 3% 的高度，否则柱图会缺格，看着像坏了。
+              style: { height: Math.max(3, Math.round((day.value / (peak || 1)) * 100)) + "%" },
+              title: `${day.key} ${formatTokens(day.value)} tok`,
+            }),
+            h("em", null, weekdays[Number.isNaN(date.getTime()) ? 0 : date.getDay()]));
+          })) : null),
       h("div", { className: "dtr-ledger-cells" },
         cell("today", "今天", totals.today, "0 点起"),
         cell("week", "本周", totals.week, "周一起"),
@@ -2822,6 +3087,35 @@ ow` 由调用方传入），
           if (timer === undefined) setSpinning(false);
         }, []);
 
+        /**
+         * 关闭面板，回到会话。
+         *
+         * 面板挂在 layout 的 main 槽里，`selectPanel(null)` 就是"不选任何主面板"，
+         * 宿主会把中间列切回会话 —— 这是宿主自己的状态机，别去动 DOM 或 history。
+         * 右边那个浮动小窗不受影响，它本来就一直在。
+         */
+        const closePanel = React.useCallback(() => {
+          try {
+            const layout = typeof ctx.get === "function" ? ctx.get("layout") : ctx.layout;
+            if (layout && typeof layout.selectPanel === "function") {
+              layout.selectPanel(null);
+              return;
+            }
+          } catch (error) {
+            ctx.logger?.warn?.("task-radar: 关闭面板失败", error);
+          }
+        }, [ctx]);
+
+        // Esc 也能关。面板里没有输入框，Esc 不会被别的东西抢。
+        React.useEffect(() => {
+          if (typeof window === "undefined" || typeof window.addEventListener !== "function") return undefined;
+          const onKey = (event) => {
+            if (event.key === "Escape") closePanel();
+          };
+          window.addEventListener("keydown", onKey);
+          return () => window.removeEventListener("keydown", onKey);
+        }, [closePanel]);
+
         const model = React.useMemo(
           () => buildModel({ list, statuses, workspaces, memory: bootRef.current.memory, now, settings: bootRef.current.view.settings, ctx }),
           [list, statuses, workspaces, now, reloadSeq, ctx],
@@ -2834,32 +3128,9 @@ ow` 由调用方传入），
           [reloadSeq, now],
         );
 
-        const openSession = (id) => {
-          try {
-            const workspace = typeof ctx.get === "function" ? ctx.get("uiWorkspace") : ctx.uiWorkspace;
-            if (workspace && typeof workspace.openSession === "function") {
-              workspace.openSession(id);
-              return;
-            }
-          } catch (error) {
-            ctx.logger?.warn?.("task-radar: 面板打开会话失败", error);
-          }
-          window.console?.warn?.("[task-radar] 没拿到 uiWorkspace.openSession，跳不过去", { id });
-        };
-
-        const metaOf = (row) => {
-          if (row.kind === "waiting") return row.waitLabel || "等你处理";
-          if (row.kind === "running") return row.runningSince ? "跑了 " + formatClock(now - row.runningSince) : "在跑";
-          if (row.finishedAt) return formatAgo(now - row.finishedAt) + "完成";
-          return "";
-        };
-
-        const sections = [
-          { key: "waiting", title: "等你处理", rows: model.sections.waiting },
-          { key: "running", title: "正在跑", rows: model.sections.running },
-          { key: "done", title: "刚完成", rows: model.sections.done },
-        ];
-        const visible = sections.reduce((sum, section) => sum + section.rows.length, 0);
+        // 2026-11-07 晚：任务清单从主面板拿掉了 —— 右下角的浮动小窗一直在列
+        // 「谁在跑、谁刚完成」，主面板再铺一遍只是重复，而且把页面撑得比视口还高。
+        // 主面板只留三块：总览、Token、外观。要进会话，点右下角那个小窗。
         const globalSkin = useGlobalSkin();
 
         // 总览带：先给结论，再给明细。四个数就是这张面板存在的理由——
@@ -2870,36 +3141,60 @@ ow` 由调用方传入），
           { key: "done", value: model.counts.done, label: "刚完成", note: "看一眼就好" },
           { key: "idle", value: model.counts.idle, label: "空闲", note: "收在下面" },
         ];
+        const overviewIcon = { waiting: "clock", running: "pulse", done: "check", idle: "moon" };
 
         // data-dsh-skin="off"：这块的颜色由本插件自己的主题表决定，
         // 不跟着「主题与外观」换肤走，也别让它的壁纸透进来（约定见 dsh-plugin-skin README）。
         return h("div", { className: "dtr-panel", "data-dsh-skin": "off" },
-          h("div", { className: "dtr-panel-head" },
-            h("div", null,
+          h("div", { className: "dtr-hero" },
+            h("span", { className: "dtr-hero-badge" },
+              APP_ICON
+                ? h("img", { src: APP_ICON, alt: "" })
+                : h(Icon, { name: "radar", size: 20 })),
+            h("div", { className: "dtr-hero-text" },
               h("h2", null, PANEL_LABEL),
-              h("div", { className: "dtr-panel-sub" }, "按状态排：谁在等你、谁在跑、谁刚跑完。点一行直接进那个会话。")),
-            h("button", {
-              type: "button",
-              className: "dtr-panel-refresh",
-              "data-spin": spinning ? "true" : "false",
-              title: "刷新：重读本地记录并重算计时（宿主的会话数据本来就是实时的）",
-              onClick: refresh,
-            },
-            h(Icon, { name: "refresh", size: 13 }),
-            h("span", null, "刷新"))),
+              h("p", { className: "dtr-panel-sub" },
+                "总览 + 外观：今天跑了多少、界面长什么样。任务清单在右下角的小窗里。")),
+            h("div", { className: "dtr-hero-actions" },
+              h("span", {
+                className: "dtr-live",
+                title: "会话状态由宿主实时推送；这里的统计每 30 秒对一次表",
+              },
+              h("i", { "aria-hidden": "true" }),
+              "实时"),
+              h("button", {
+                type: "button",
+                className: "dtr-panel-refresh",
+                "data-spin": spinning ? "true" : "false",
+                title: "刷新：重读本地记录并重算计时（宿主的会话数据本来就是实时的）",
+                onClick: refresh,
+              },
+              h(Icon, { name: "refresh", size: 13 }),
+              h("span", null, "刷新")),
+              h("button", {
+                type: "button",
+                className: "dtr-panel-close",
+                title: "关闭面板，回到会话（Esc）",
+                "aria-label": "关闭工作小管家面板",
+                onClick: closePanel,
+              },
+              h(Icon, { name: "close", size: 13 })))),
 
           h("div", { className: "dtr-overview" },
             overview.map((cell) => h("div", { key: cell.key, className: "dtr-overview-cell", "data-k": cell.key },
+              h("span", { className: "dtr-overview-ico", "aria-hidden": "true" },
+                h(Icon, { name: overviewIcon[cell.key] || "minus", size: 14 })),
               h("b", null, String(cell.value)),
               h("span", { className: "dtr-overview-label" }, cell.label),
               h("span", { className: "dtr-overview-note" }, cell.note)))),
 
-          // Token 合计单独一行：它不是"几个任务"，混进总览带会把两件事挤在一起。
+          // Token 合计单独一条：它不是"几个任务"，混进总览带会把两件事挤在一起。
           model.totals.tokensKnown
             ? h("div", {
               className: "dtr-panel-spend",
               title: "本屏这些会话（含子代理）各自累计消耗之和，不是某个会话的数",
             },
+            h("span", { className: "dtr-spend-ico", "aria-hidden": "true" }, h(Icon, { name: "coin", size: 13 })),
             h("span", { className: "dtr-panel-spend-k" }, "Token 合计"),
             h("b", null, formatTokens(model.totals.tokens)),
             h("span", { className: "dtr-panel-spend-note" },
@@ -2910,38 +3205,9 @@ ow` 由调用方传入），
 
           h(SkinPicker, { snapshot: globalSkin }),
 
-          model.phase === "pending"
-            ? h("div", { className: "dtr-panel-empty" }, "会话列表还在加载…")
-            : null,
-
-          visible === 0 && model.phase !== "pending"
-            ? h("div", { className: "dtr-panel-empty" },
-              model.counts.total === 0
-                ? "现在没有在等你或正在跑的会话。开一个新会话，它就会出现在这里。"
-                : `有 ${model.counts.total} 个会话，但都处于空闲状态（没有在跑、也没有待处理）。`)
-            : null,
-
-          sections.map((section) => (section.rows.length === 0 ? null : h("div", { key: section.key, className: "dtr-panel-group" },
-            h("h3", null, `${section.title} · ${section.rows.length}`),
-            section.rows.map((row) => h("button", {
-              key: row.id,
-              className: "dtr-panel-row",
-              type: "button",
-              onClick: () => openSession(row.id),
-              title: row.cwd ? `${row.title} — ${row.cwd}` : row.title,
-            },
-            h("span", { className: "dtr-panel-title" }, row.title),
-            row.workspace ? h("span", { className: "dtr-panel-tag" }, row.workspace) : null,
-            row.todo ? h("span", { className: "dtr-panel-meta" }, `${row.todo.done}/${row.todo.total}`) : null,
-            row.token ? h("span", { className: "dtr-panel-tok", title: row.token.title }, row.token.label) : null,
-            h("span", { className: "dtr-panel-meta" }, metaOf(row))))))),
-
-          model.hidden > 0
-            ? h("div", { className: "dtr-panel-hint" }, `另有 ${model.hidden} 个更早完成的没列出来。`)
-            : null,
-
           h("div", { className: "dtr-panel-foot" },
-            "右下角那个浮动小窗还在，可以拖动、可以收成胶囊；这个面板和它读的是同一份数据。"));
+            h(Icon, { name: "info", size: 13 }),
+            h("span", null, "任务清单在右下角的浮动小窗里：可以拖动、可以收成胶囊，点一行就能进会话。这个面板只放总览、Token 和外观，两边读的是同一份数据。")));
       };
     }
 

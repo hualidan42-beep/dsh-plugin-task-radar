@@ -612,15 +612,15 @@ check(/\.dtr-skin-grid\{display:grid/.test(css), "样式: 皮肤卡走 grid 布�
  * 修法：承载文字的面改用 relative color（rgb(from <令牌> r g b)）抹掉 alpha ——
  * 色相仍跟宿主/皮肤走，面永远实心。这里钉住三件事：兜底规则在、写在原规则**之后**、面板自己有底。
  */
-const plateAt = css.indexOf("background-color:rgb(from var(--dsw-alias-bg-base");
+const plateAt = css.indexOf("--dtr-paper:rgb(from var(--dsw-alias-bg-base");
 const cardAt = css.indexOf(".dtr-card{");
 const pillAt = css.indexOf(".dtr-pill{");
 check(plateAt > 0, "换壁纸: 面板有一层实心底（原来它压根没有背景，字直接压在壁纸上）");
-check(cardAt >= 0 && plateAt > cardAt, "换壁纸: 实心兜底写在卡片规则之后（写在前面会被覆盖，等于没改）");
-check(pillAt >= 0 && plateAt > pillAt, "换壁纸: 实心兜底也盖住了胶囊");
+check(cardAt >= 0 && plateAt > cardAt, "换壁纸: 实心底变量声明在卡片规则之后（写在前面会被覆盖，等于没改）");
+check(pillAt >= 0 && /\.dtr-pill\{[^}]*background-color:rgb\(from var\(--dsw-alias-bg-layer-1/.test(css), "换壁纸: 实心兜底也盖住了胶囊");
+check(/\.dtr-panel\{[^}]*var\(--dtr-paper\)/.test(css), "换壁纸: 面板背景真的用了那层实心底");
 check(/\.dtr-card\{[^}]*background-color:rgb\(from var\(--dsw-alias-bg-layer-1/.test(css), "换壁纸: 卡片底色不再直接吃宿主的半透明令牌");
-check(/\.dtr-head,\.dtr-foot[^{]*\{background-color:rgb\(from/.test(css), "换壁纸: 卡头/卡尾/设置页这些承载文字的面都实心化");
-check(!/\.dtr-panel-row:hover\{background:rgb\(from/.test(css), "换壁纸: hover 层保持半透明（实心 hover 会把行糊成色块）");
+check(/\.dtr-panel-row:hover\{background:rgb\(from/.test(css) === false, "换壁纸: hover 层保持半透明（实心 hover 会把行糊成色块）");
 // 踩过的坑：relative color 省略 alpha 时会**继承原色的透明度**，
 // `rgb(from rgba(...,.42) r g b)` 算出来还是 0.42 —— 看着"改了"，其实一点没变。
 // 注释里也写着 `rgb(from … r g b)` 当例子，所以先剥注释再数。
@@ -629,9 +629,11 @@ check((cssCode.match(/ r g b\)/g) || []).length === 0, "换壁纸: 没有漏写 
 check((cssCode.match(/ r g b \/ 1\)/g) || []).length >= 5, "换壁纸: 承载文字的面都显式把 alpha 钉成 1");
 // 品牌蓝当小字用只有 4.3:1（实测），差一点点不到 AA 4.5。往字色里收 22% 就够，
 // 而且这个混法是"往当前字色靠"，深色主题下自动变成提亮，不用分两套。
+// 2026-11-09：Token 数字改用主题强调色（--dtr-accent）往字色收 74%，同样满足对比度，
+// 这里只钉"必须是 color-mix 往字色收"，不再钉死具体是哪一个色令牌。
 check(
-  /\.dtr-panel-row \.dtr-panel-tok\{[^}]*color:color-mix\(in srgb,var\(--dsw-alias-state-business-primary/.test(css),
-  "换壁纸: Token 数字的品牌蓝往字色里收过（纯品牌蓝 12px 文字只有 4.3:1，不到 AA）",
+  /\.dtr-panel-row \.dtr-panel-tok\{[^}]*color:color-mix\(in srgb,var\(--dtr-accent\)[^}]*var\(--dtr-text\)/.test(css),
+  "换壁纸: Token 数字的颜色往字色里收过（纯品牌色 12px 文字不到 AA）",
 );
 
 // ── 外观：樱粉主题与角上的装饰画 ─────────────────────────────────────────────

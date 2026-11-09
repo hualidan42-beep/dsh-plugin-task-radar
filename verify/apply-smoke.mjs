@@ -731,7 +731,10 @@ check(
 );
 check(panelText.includes("工作小管家"), "面板: 标题也叫工作小管家（别跟侧栏行对不上）");
 check(panelText.includes("等你处理") && panelText.includes("正在跑") && panelText.includes("刚完成"), "面板: 三个状态分组都在");
-check(panelText.includes("重写鉴权中间件"), "面板: 列出正在跑的会话");
+// 2026-11-07 起主面板不再铺会话清单（右下角小窗已经在列，重复只会把页面撑高）。
+// 会话标题出现在面板里反而是回归，这里钉反向断言；清单本身由小窗那组用例负责。
+check(!panelText.includes("重写鉴权中间件"), "面板: 不再重复列会话（清单只在浮动小窗里）");
+check(withClass(panelTree, "dtr-panel-row").length === 0, "面板: 一行任务都不渲染");
 check(!panelText.includes("归档掉的旧活") && !panelText.includes("新会话"), "面板: 归档与空会话都不列");
 
 // 总览带：先给结论（几个在跑 / 几个等你 / 几个刚完成 / 几个空闲），再给明细。
@@ -787,10 +790,10 @@ const tokenProps = {
 };
 const tokenPanel = hydrate(ReactStub.render(Panel, tokenProps));
 const tokenPanelText = textOf(tokenPanel);
-const panelTokens = withClass(tokenPanel, "dtr-panel-tok");
-check(panelTokens.length === 2, "面板 Token: 有记账的任务各一格，没记账的不留空位", panelTokens.map((cell) => textOf(cell)));
-check(tokenPanelText.includes("300K tok"), "面板 Token: 有累计就显示累计，不显示本次");
-check(tokenPanelText.includes("16K tok"), "面板 Token: 只有单次用量时退回单次");
+// 2026-11-07：逐任务的 Token 格子跟着任务清单一起挪到了浮动小窗（小窗那组用例已覆盖
+// 「有量才挂、累计优先、单次兜底」三条口径）。面板这边只保留"合计"与"不重复列任务"。
+check(withClass(tokenPanel, "dtr-panel-tok").length === 0, "面板 Token: 不再逐个任务挂格子（只在合计里出现）");
+check(!tokenPanelText.includes("300K tok"), "面板 Token: 不再重复显示单任务用量");
 const spend = withClass(tokenPanel, "dtr-panel-spend")[0];
 check(Boolean(spend), "面板 Token: 总览带下面有一行合计");
 check(textOf(spend).includes(radar.formatTokens(315_500)), "面板 Token: 合计是各任务之和（300K + 16K），不是只取第一个", textOf(spend));
@@ -804,16 +807,12 @@ check(Boolean(ledgerBlock), "面板流水: 合计下面有一块 Token 流水");
 const ledgerCells = withClass(tokenPanel, "dtr-ledger-cell");
 check(ledgerCells.length === 3, "面板流水: 今天 / 本周 / 本月三格", ledgerCells.map((cell) => textOf(cell)));
 check(ledgerCells.map((cell) => textOf(cell)).join("|") === "今天 — 0 点起|本周 — 周一起|本月 — 1 号起", "面板流水: 三格各自写明起点（0 点 / 周一 / 1 号）", ledgerCells.map((cell) => textOf(cell)));
-const ledgerBars = withClass(tokenPanel, "dtr-ledger-bars")[0];
-check((ledgerBars?.children ?? []).length === 7, "面板流水: 柱图是七根（最近 7 天）");
+// 柱图只在"开始记账之后"才画（空态不画七根空柱，否则看着像有数据）。
+check(withClass(tokenPanel, "dtr-ledger-bars").length === 0, "面板流水: 没记过账时不画柱图");
 check(ledgerBlock?.props?.["data-empty"] === "true", "面板流水: 没记过账时是空态，不假装有数");
 check(textOf(ledgerBlock).includes("还没开始记"), "面板流水: 空态说实话（还没开始记）", textOf(ledgerBlock));
 
-// 点一行就该进那个会话 —— 和悬浮小窗走同一条路（uiWorkspace.openSession）。
-const panelTaskRow = findAll(panelTree, (element) => element.props?.className === "dtr-panel-row")[0];const openedBefore = opened.length;
-check(Boolean(panelTaskRow), "面板: 有可点的行");
-panelTaskRow.props.onClick();
-check(opened.length === openedBefore + 1, "面板: 点一行会打开对应会话", opened.slice(-1));
+// 面板不再列任务，所以"点一行进会话"这条路径由浮动小窗的用例负责（见上文卡片点击）。
 
 // ── 面板上的换肤区：两种世界 ────────────────────────────────────────────────
 /**
